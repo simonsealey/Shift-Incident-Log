@@ -33,7 +33,7 @@ function logout() {
 function showApp() {
   document.getElementById("pin-gate").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
-  setDefaultDate();
+  setDefaults();
 }
 
 // Allow Enter key on PIN input
@@ -56,10 +56,36 @@ function switchTab(tab) {
 
 // ── Form Submission ───────────────────────────────────────
 
-function setDefaultDate() {
-  const today = new Date().toISOString().split("T")[0];
-  document.getElementById("date").value = today;
+// Map a "HH:MM" time to its shift.
+// Day 05:30–14:29, Evening 14:30–22:29, Overnight 22:30–05:29
+function shiftForTime(hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const mins = h * 60 + m;
+  if (mins >= 330 && mins < 870)  return "Day";       // 05:30–14:29
+  if (mins >= 870 && mins < 1350) return "Evening";   // 14:30–22:29
+  return "Overnight";                                 // 22:30–05:29
 }
+
+// Pre-fill date, current time, and the matching shift.
+function setDefaults() {
+  const now = new Date();
+
+  const yyyy = now.getFullYear();
+  const mo   = String(now.getMonth() + 1).padStart(2, "0");
+  const da   = String(now.getDate()).padStart(2, "0");
+  document.getElementById("date").value = `${yyyy}-${mo}-${da}`;
+
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const t  = `${hh}:${mm}`;
+  document.getElementById("time").value  = t;
+  document.getElementById("shift").value = shiftForTime(t);
+}
+
+// Keep the shift in sync if the user edits the time manually.
+document.getElementById("time").addEventListener("input", (e) => {
+  if (e.target.value) document.getElementById("shift").value = shiftForTime(e.target.value);
+});
 
 document.getElementById("entry-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -91,7 +117,7 @@ document.getElementById("entry-form").addEventListener("submit", async (e) => {
     statusEl.textContent = "Entry submitted successfully.";
     statusEl.className = "status-msg success";
     form.reset();
-    setDefaultDate();
+    setDefaults();
   } catch (err) {
     statusEl.textContent = `Submission failed: ${err.message}`;
     statusEl.className = "status-msg error-msg";
