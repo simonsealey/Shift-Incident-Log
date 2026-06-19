@@ -76,7 +76,7 @@ document.getElementById("entry-form").addEventListener("submit", async (e) => {
     date:             form.date.value,
     shift:            form.shift.value,
     time:             form.time.value,
-    initials:         form.initials.value.trim().toUpperCase(),
+    staff_name:       form.staffName.value.trim(),
     campus:           form.campus.value,
     event_type:       form.eventType.value,
     narrative:        form.narrative.value.trim(),
@@ -121,7 +121,7 @@ async function loadLog() {
       date:           r.date,
       shift:          r.shift,
       time:           r.time,
-      initials:       r.initials,
+      name:           r.staff_name,
       campus:         r.campus,
       eventType:      r.event_type,
       narrative:      r.narrative,
@@ -172,7 +172,7 @@ function renderTable(entries) {
       <td>${r.date || ""}</td>
       <td>${r.shift || ""}</td>
       <td>${r.time || ""}</td>
-      <td>${r.initials || ""}</td>
+      <td>${r.name || ""}</td>
       <td>${r.campus || ""}</td>
       <td><span class="badge badge-${(r.eventType||"").toLowerCase()}">${r.eventType || ""}</span></td>
       <td style="min-width:340px;max-width:480px">${r.narrative || ""}</td>
@@ -188,7 +188,7 @@ function renderTable(entries) {
           <th>Date</th>
           <th>Shift</th>
           <th>Time</th>
-          <th>Initials</th>
+          <th>Name</th>
           <th>Campus</th>
           <th>Event Type</th>
           <th>Narrative</th>

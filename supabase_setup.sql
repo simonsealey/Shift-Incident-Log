@@ -7,7 +7,7 @@ create table if not exists shift_log (
   date             date,
   shift            text,
   time             text,
-  initials         text,
+  staff_name       text,
   campus           text,
   event_type       text,
   narrative        text,
