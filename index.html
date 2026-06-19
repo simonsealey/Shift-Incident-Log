@@ -29,6 +29,7 @@
       <nav>
         <button class="tab-btn active" onclick="switchTab('submit')">Submit Entry</button>
         <button class="tab-btn" onclick="switchTab('log')">View Log</button>
+        <button class="tab-btn" onclick="switchTab('dashboard')">Dashboard</button>
       </nav>
     </header>
 
@@ -122,10 +123,15 @@
       <div class="card">
         <h2>Log Entries</h2>
 
+        <div class="field full-width">
+          <label for="filter-search">Search</label>
+          <input type="text" id="filter-search" placeholder="Search name, narrative, notes…" oninput="applyFilters()" />
+        </div>
+
         <div class="filters">
           <div class="field">
             <label for="filter-campus">Campus</label>
-            <select id="filter-campus">
+            <select id="filter-campus" onchange="applyFilters()">
               <option value="">All Campuses</option>
               <option>Main Campus</option>
               <option>Phoenix Concept</option>
@@ -135,7 +141,7 @@
 
           <div class="field">
             <label for="filter-event">Event Type</label>
-            <select id="filter-event">
+            <select id="filter-event" onchange="applyFilters()">
               <option value="">All Types</option>
               <option>Incident</option>
               <option>Medical</option>
@@ -147,29 +153,32 @@
           </div>
 
           <div class="field">
-            <label for="filter-followup">Follow-Up Needed</label>
-            <select id="filter-followup">
+            <label for="filter-followup">Follow-Up</label>
+            <select id="filter-followup" onchange="applyFilters()">
               <option value="">All</option>
-              <option>Yes</option>
-              <option>No</option>
+              <option value="open">Open</option>
+              <option value="resolved">Resolved</option>
+              <option value="none">Not needed</option>
             </select>
           </div>
 
           <div class="field">
             <label for="filter-date-from">Date From</label>
-            <input type="date" id="filter-date-from" />
+            <input type="date" id="filter-date-from" onchange="applyFilters()" />
           </div>
 
           <div class="field">
             <label for="filter-date-to">Date To</label>
-            <input type="date" id="filter-date-to" />
+            <input type="date" id="filter-date-to" onchange="applyFilters()" />
           </div>
 
           <div class="filter-actions">
-            <button onclick="applyFilters()">Apply Filters</button>
             <button class="secondary" onclick="clearFilters()">Clear</button>
+            <button onclick="exportCsv()">Export CSV</button>
           </div>
         </div>
+
+        <div id="log-summary" class="log-summary"></div>
 
         <div id="log-status" class="status-msg"></div>
         <div id="log-table-wrap">
@@ -177,9 +186,48 @@
         </div>
       </div>
     </main>
+
+    <!-- Dashboard Tab -->
+    <main id="tab-dashboard" class="tab-content hidden">
+      <div class="stat-grid" id="stat-grid"></div>
+      <div class="chart-grid">
+        <div class="card chart-card">
+          <h3>Entries by Event Type</h3>
+          <canvas id="chart-event"></canvas>
+        </div>
+        <div class="card chart-card">
+          <h3>Entries by Campus</h3>
+          <canvas id="chart-campus"></canvas>
+        </div>
+        <div class="card chart-card">
+          <h3>Follow-Ups</h3>
+          <canvas id="chart-followup"></canvas>
+        </div>
+        <div class="card chart-card">
+          <h3>Entries by Shift</h3>
+          <canvas id="chart-shift"></canvas>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Resolve follow-up modal -->
+  <div id="resolve-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h3>Resolve Follow-Up</h3>
+      <p class="muted" id="resolve-context"></p>
+      <label for="resolve-name">Resolved by</label>
+      <input type="text" id="resolve-name" maxlength="60" placeholder="Your name" />
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeResolveModal()">Cancel</button>
+        <button onclick="confirmResolve()">Mark Resolved</button>
+      </div>
+      <p id="resolve-error" class="error hidden"></p>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="script.js"></script>
 </body>
 </html>

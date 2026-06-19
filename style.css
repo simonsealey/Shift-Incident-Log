@@ -289,8 +289,10 @@ tbody td { padding: 10px 12px; vertical-align: top; }
   white-space: nowrap;
 }
 
-.badge-yes     { background: #fef2f2; color: #dc2626; }
-.badge-no      { background: #f0fdf4; color: #16a34a; }
+.badge-yes      { background: #fef2f2; color: #dc2626; }
+.badge-no       { background: #f0fdf4; color: #16a34a; }
+.badge-open     { background: #fef2f2; color: #dc2626; }
+.badge-resolved { background: #f0fdf4; color: #16a34a; }
 .badge-incident   { background: #fef2f2; color: #dc2626; }
 .badge-medical    { background: #fff7ed; color: #ea580c; }
 .badge-behavioral { background: #faf5ff; color: #9333ea; }
@@ -304,3 +306,95 @@ tbody td { padding: 10px 12px; vertical-align: top; }
   color: var(--muted);
   font-size: 14px;
 }
+
+/* ── Follow-up cell ── */
+.followup-cell { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+.resolve-btn {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.resolve-btn:hover { background: var(--primary-h); }
+
+.resolved-meta { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+
+/* ── Log summary bar ── */
+.log-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.summary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.summary-pill .count { font-size: 18px; font-weight: 700; }
+.summary-pill.alert  { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+.summary-pill.ok     { background: #f0fdf4; border-color: #bbf7d0; color: #16a34a; }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, .45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+
+.modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px;
+  width: 100%;
+  max-width: 380px;
+}
+.modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+.modal label { display: block; margin: 16px 0 6px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+/* ── Dashboard ── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+.stat-card .stat-value { font-size: 30px; font-weight: 700; color: var(--text); }
+.stat-card .stat-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.stat-card.alert .stat-value { color: #dc2626; }
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+.chart-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+.chart-card canvas { max-height: 260px; }
