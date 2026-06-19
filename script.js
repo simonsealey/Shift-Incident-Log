@@ -175,7 +175,7 @@ function renderTable(entries) {
       <td>${r.initials || ""}</td>
       <td>${r.campus || ""}</td>
       <td><span class="badge badge-${(r.eventType||"").toLowerCase()}">${r.eventType || ""}</span></td>
-      <td style="max-width:260px">${r.narrative || ""}</td>
+      <td style="min-width:340px;max-width:480px">${r.narrative || ""}</td>
       <td><span class="badge ${r.followUpNeeded === "Yes" ? "badge-yes" : "badge-no"}">${r.followUpNeeded || ""}</span></td>
       <td>${r.followUpNotes || ""}</td>
     </tr>
