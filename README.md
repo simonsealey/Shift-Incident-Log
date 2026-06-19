@@ -2,23 +2,40 @@
 
 A web-based shift and incident logging tool built for a multi-campus behavioral health facility. Staff submit entries from any device via a clean PIN-protected form; supervisors and leads review the full log with filtering in real time.
 
-> **Note:** This is a structural prototype. No real client or patient data is used.
+[![Live Demo](https://img.shields.io/badge/Live-Demo-2563eb?style=flat-square)](https://simonsealey.github.io/Shift-Incident-Log/)
+![Frontend](https://img.shields.io/badge/Frontend-HTML%20%7C%20CSS%20%7C%20JS-orange?style=flat-square)
+![Backend](https://img.shields.io/badge/Backend-Supabase%20%2F%20Postgres-3ecf8e?style=flat-square)
+![Hosting](https://img.shields.io/badge/Hosting-GitHub%20Pages-181717?style=flat-square)
+
+> **Note:** This is a structural prototype. No real client or patient data is used — all sample entries are fictional.
+
+**🔗 Live demo:** https://simonsealey.github.io/Shift-Incident-Log/ &nbsp;(PIN: `1474`)
+
+---
+
+## Screenshots
+
+### Submit an entry
+![Submit form](assets/02-form.png)
+
+### Review the log (filterable)
+![Log view](assets/03-log.png)
+
+### Secure access
+![PIN gate](assets/01-pin.png)
 
 ---
 
 ## Features
 
-- PIN-protected access (shared among staff)
-- Submit log entries from any browser — phone, tablet, or desktop
-- Entries stored in Google Sheets (no server required)
-- View log with filters by:
-  - Campus
-  - Event Type
-  - Follow-Up Needed
-  - Date range
-- Color-coded event type and follow-up badges
-- Newest entries shown first
-- Fully responsive layout
+- **PIN-protected access** shared among staff
+- **Submit from any device** — phone, tablet, or desktop
+- **Centralized storage** in a hosted Postgres database (Supabase)
+- **Filterable log view** by Campus, Event Type, Follow-Up Needed, and Date range
+- **Color-coded badges** for event type and follow-up status
+- **Newest entries first** for fast shift handoffs
+- **Row Level Security** — public users can add and view entries, but cannot delete them
+- **Fully responsive** layout
 
 ## Fields Logged
 
