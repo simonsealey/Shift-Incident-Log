@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shift & Incident Log</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- PIN Gate -->
+  <div id="pin-gate">
+    <div class="pin-box">
+      <h1>Shift & Incident Log</h1>
+      <p>Enter your PIN to continue</p>
+      <input type="password" id="pin-input" maxlength="6" placeholder="••••" autocomplete="off" />
+      <button onclick="checkPin()">Enter</button>
+      <p id="pin-error" class="error hidden">Incorrect PIN. Please try again.</p>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app" class="hidden">
+    <header>
+      <div class="header-inner">
+        <h1>Shift & Incident Log</h1>
+        <button class="logout-btn" onclick="logout()">Lock</button>
+      </div>
+      <nav>
+        <button class="tab-btn active" onclick="switchTab('submit')">Submit Entry</button>
+        <button class="tab-btn" onclick="switchTab('log')">View Log</button>
+      </nav>
+    </header>
+
+    <!-- Submit Tab -->
+    <main id="tab-submit" class="tab-content">
+      <div class="card">
+        <h2>New Log Entry</h2>
+        <form id="entry-form">
+          <div class="form-grid">
+
+            <div class="field">
+              <label for="date">Date</label>
+              <input type="date" id="date" name="date" required />
+            </div>
+
+            <div class="field">
+              <label for="shift">Shift</label>
+              <select id="shift" name="shift" required>
+                <option value="">— Select —</option>
+                <option>Day</option>
+                <option>Evening</option>
+                <option>Overnight</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="time">Time</label>
+              <input type="time" id="time" name="time" required />
+            </div>
+
+            <div class="field">
+              <label for="initials">Staff Initials</label>
+              <input type="text" id="initials" name="initials" maxlength="5" placeholder="e.g. JS" required />
+            </div>
+
+            <div class="field">
+              <label for="campus">Campus</label>
+              <select id="campus" name="campus" required>
+                <option value="">— Select —</option>
+                <option>Main Campus</option>
+                <option>Phoenix Concept</option>
+                <option>Stepping Stone</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="event-type">Event Type</label>
+              <select id="event-type" name="eventType" required>
+                <option value="">— Select —</option>
+                <option>Incident</option>
+                <option>Medical</option>
+                <option>Behavioral</option>
+                <option>Maintenance</option>
+                <option>Visitor</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div class="field full-width">
+              <label for="narrative">Narrative</label>
+              <textarea id="narrative" name="narrative" rows="4" placeholder="Describe the event in detail..." required></textarea>
+            </div>
+
+            <div class="field">
+              <label for="followup">Follow-Up Needed</label>
+              <select id="followup" name="followUpNeeded" required>
+                <option value="">— Select —</option>
+                <option>Yes</option>
+                <option>No</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="followup-notes">Follow-Up Notes / Assigned To</label>
+              <input type="text" id="followup-notes" name="followUpNotes" placeholder="e.g. Assigned to Shift Lead — Jane D." />
+            </div>
+
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="submit-btn">Submit Entry</button>
+          </div>
+
+          <p id="form-status" class="status-msg hidden"></p>
+        </form>
+      </div>
+    </main>
+
+    <!-- Log View Tab -->
+    <main id="tab-log" class="tab-content hidden">
+      <div class="card">
+        <h2>Log Entries</h2>
+
+        <div class="filters">
+          <div class="field">
+            <label for="filter-campus">Campus</label>
+            <select id="filter-campus">
+              <option value="">All Campuses</option>
+              <option>Main Campus</option>
+              <option>Phoenix Concept</option>
+              <option>Stepping Stone</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="filter-event">Event Type</label>
+            <select id="filter-event">
+              <option value="">All Types</option>
+              <option>Incident</option>
+              <option>Medical</option>
+              <option>Behavioral</option>
+              <option>Maintenance</option>
+              <option>Visitor</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="filter-followup">Follow-Up Needed</label>
+            <select id="filter-followup">
+              <option value="">All</option>
+              <option>Yes</option>
+              <option>No</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="filter-date-from">Date From</label>
+            <input type="date" id="filter-date-from" />
+          </div>
+
+          <div class="field">
+            <label for="filter-date-to">Date To</label>
+            <input type="date" id="filter-date-to" />
+          </div>
+
+          <div class="filter-actions">
+            <button onclick="applyFilters()">Apply Filters</button>
+            <button class="secondary" onclick="clearFilters()">Clear</button>
+          </div>
+        </div>
+
+        <div id="log-status" class="status-msg"></div>
+        <div id="log-table-wrap">
+          <p class="muted">Loading entries...</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="script.js"></script>
+</body>
+</html>
