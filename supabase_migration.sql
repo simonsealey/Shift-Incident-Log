@@ -18,9 +18,10 @@ begin
 end $$;
 
 -- 2. Add follow-up resolution tracking
-alter table shift_log add column if not exists resolved     boolean not null default false;
-alter table shift_log add column if not exists resolved_by  text;
-alter table shift_log add column if not exists resolved_at  timestamptz;
+alter table shift_log add column if not exists resolved         boolean not null default false;
+alter table shift_log add column if not exists resolved_by      text;
+alter table shift_log add column if not exists resolved_at      timestamptz;
+alter table shift_log add column if not exists resolution_notes text;
 
 -- 3. Allow the public (anon) role to update rows (needed to resolve follow-ups).
 --    With per-user auth this would be restricted to leads; fine for the prototype.

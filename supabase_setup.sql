@@ -15,7 +15,8 @@ create table if not exists shift_log (
   follow_up_notes  text,
   resolved         boolean not null default false,
   resolved_by      text,
-  resolved_at      timestamptz
+  resolved_at      timestamptz,
+  resolution_notes text
 );
 
 -- Row Level Security: lock the table, then allow the public (anon) key to

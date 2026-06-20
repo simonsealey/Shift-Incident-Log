@@ -179,6 +179,7 @@ async function fetchEntries() {
     resolved:       r.resolved,
     resolvedBy:     r.resolved_by,
     resolvedAt:     r.resolved_at,
+    resolutionNotes:r.resolution_notes,
   }));
   return allEntries;
 }
@@ -276,7 +277,7 @@ function renderTable(entries) {
       <td><span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span></td>
       <td style="min-width:340px;max-width:480px;white-space:pre-wrap">${escapeHtml(r.narrative)}</td>
       <td>${followCell}</td>
-      <td>${escapeHtml(r.followUpNotes)}</td>
+      <td>${escapeHtml(r.followUpNotes)}${isResolved(r) && r.resolutionNotes ? `<div class="resolution-note"><strong>Resolution:</strong> ${escapeHtml(r.resolutionNotes)}</div>` : ""}</td>
     </tr>`;
   }).join("");
 
@@ -311,6 +312,7 @@ function openResolveModal(id) {
     entry ? `${entry.eventType} · ${entry.campus} · ${fmtDate(entry.date)}` : "";
   const nameInput = document.getElementById("resolve-name");
   nameInput.value = localStorage.getItem("shiftlog_resolver") || "";
+  document.getElementById("resolve-notes").value = entry && entry.resolutionNotes ? entry.resolutionNotes : "";
   document.getElementById("resolve-error").classList.add("hidden");
   document.getElementById("resolve-modal").classList.remove("hidden");
   nameInput.focus();
@@ -323,6 +325,7 @@ function closeResolveModal() {
 
 async function confirmResolve() {
   const name = document.getElementById("resolve-name").value.trim();
+  const notes = document.getElementById("resolve-notes").value.trim();
   const errEl = document.getElementById("resolve-error");
 
   if (!name) {
@@ -333,7 +336,7 @@ async function confirmResolve() {
 
   try {
     const { error } = await db.from("shift_log")
-      .update({ resolved: true, resolved_by: name, resolved_at: new Date().toISOString() })
+      .update({ resolved: true, resolved_by: name, resolved_at: new Date().toISOString(), resolution_notes: notes })
       .eq("id", pendingResolveId);
     if (error) throw error;
 
@@ -352,7 +355,7 @@ function exportCsv() {
   if (!currentView.length) { alert("No entries to export."); return; }
 
   const headers = ["Date","Shift","Time","Name","Campus","Event Type","Narrative",
-                   "Follow-Up Needed","Follow-Up Notes/Assigned To","Resolved","Resolved By","Resolved At"];
+                   "Follow-Up Needed","Follow-Up Notes/Assigned To","Resolved","Resolved By","Resolved At","Resolution Notes"];
 
   const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
@@ -361,7 +364,7 @@ function exportCsv() {
     lines.push([
       r.date, r.shift, r.time, r.name, r.campus, r.eventType, r.narrative,
       r.followUpNeeded, r.followUpNotes,
-      r.resolved ? "Yes" : "No", r.resolvedBy, r.resolvedAt ? fmtDate(r.resolvedAt) : ""
+      r.resolved ? "Yes" : "No", r.resolvedBy, r.resolvedAt ? fmtDate(r.resolvedAt) : "", r.resolutionNotes
     ].map(cell).join(","));
   });
 
