@@ -293,12 +293,13 @@ tbody td { padding: 10px 12px; vertical-align: top; }
 .badge-no       { background: #f0fdf4; color: #16a34a; }
 .badge-open     { background: #fef2f2; color: #dc2626; }
 .badge-resolved { background: #f0fdf4; color: #16a34a; }
-.badge-incident   { background: #fef2f2; color: #dc2626; }
-.badge-medical    { background: #fff7ed; color: #ea580c; }
-.badge-behavioral { background: #faf5ff; color: #9333ea; }
-.badge-maintenance{ background: #fffbeb; color: #ca8a04; }
-.badge-visitor    { background: #eff6ff; color: #2563eb; }
-.badge-other      { background: #f8fafc; color: #64748b; }
+.badge-incident    { background: #fef2f2; color: #dc2626; }
+.badge-medical     { background: #fff7ed; color: #ea580c; }
+.badge-medications { background: #f0fdf4; color: #15803d; }
+.badge-behavioral  { background: #faf5ff; color: #9333ea; }
+.badge-maintenance { background: #fffbeb; color: #ca8a04; }
+.badge-visitor     { background: #eff6ff; color: #2563eb; }
+.badge-other       { background: #f8fafc; color: #64748b; }
 
 .no-results {
   text-align: center;
