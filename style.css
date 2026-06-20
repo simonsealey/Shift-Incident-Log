@@ -383,12 +383,38 @@ tbody td { padding: 10px 12px; vertical-align: top; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
 /* ── Dashboard ── */
+.dash-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.dash-filters-label {
+  margin: 0;
+}
+.dash-filters select,
+.dash-filters input[type="date"] {
+  width: auto;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
   margin-bottom: 20px;
 }
+
+.stat-delta {
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-top: 8px;
+}
+.stat-delta .stat-delta-label { font-weight: 400; color: var(--muted); }
+.stat-delta.good    { color: var(--success); }
+.stat-delta.bad     { color: var(--danger); }
+.stat-delta.neutral { color: var(--text); }
+.stat-delta.flat    { color: var(--muted); }
 
 .stat-card {
   background: var(--surface);

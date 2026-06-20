@@ -8,6 +8,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const CORRECT_PIN = "1474";
 const SESSION_KEY = "shiftlog_auth";
 const NAME_KEY    = "shiftlog_staff_name";  // remembers the BHT's name per-device
+const CAMPUS_KEY  = "shiftlog_campus";      // remembers the last campus per-device
 
 // ── PIN Gate ──────────────────────────────────────────────
 
@@ -83,9 +84,11 @@ function setDefaults() {
   document.getElementById("time").value  = t;
   document.getElementById("shift").value = shiftForTime(t);
 
-  // Remember the staff member's name on this device so they don't retype it.
+  // Remember the staff member's name and campus on this device so they don't retype them.
   const savedName = localStorage.getItem(NAME_KEY);
   if (savedName) document.getElementById("staff-name").value = savedName;
+  const savedCampus = localStorage.getItem(CAMPUS_KEY);
+  if (savedCampus) document.getElementById("campus").value = savedCampus;
 }
 
 // Keep the shift in sync if the user edits the time manually.
@@ -121,6 +124,7 @@ document.getElementById("entry-form").addEventListener("submit", async (e) => {
     if (error) throw error;
 
     if (row.staff_name) localStorage.setItem(NAME_KEY, row.staff_name);
+    if (row.campus)     localStorage.setItem(CAMPUS_KEY, row.campus);
 
     statusEl.textContent = "Entry submitted successfully.";
     statusEl.className = "status-msg success";
@@ -463,19 +467,126 @@ function peakIndex(arr) {
   return max > 0 ? arr.indexOf(max) : -1;
 }
 
-// Daily entry counts for the last `days` days, ending today (continuous series).
-function dailyTrend(entries, days) {
+// Format a Date as a local "YYYY-MM-DD" key.
+function localKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Daily entry counts across [from, to] inclusive (continuous series, capped at 90 days).
+function dailyTrendRange(entries, from, to) {
   const byDate = {};
   entries.forEach(e => { if (e.date) byDate[e.date] = (byDate[e.date] || 0) + 1; });
+
+  let start = from ? new Date(from) : null;
+  let end   = to   ? new Date(to)   : new Date();
+  if (!start) {
+    const dates = entries.map(e => parseLocalDate(e.date)).filter(Boolean).sort((a, b) => a - b);
+    start = dates.length ? new Date(dates[0]) : new Date();
+  }
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+
+  const DAY = 86400000, MAX_DAYS = 90;
+  let days = Math.round((end - start) / DAY) + 1;
+  if (days > MAX_DAYS) { start = new Date(end.getTime() - (MAX_DAYS - 1) * DAY); days = MAX_DAYS; }
+  if (days < 1) days = 1;
+
   const labels = [], data = [];
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today); d.setDate(today.getDate() - i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
     labels.push(d.toLocaleDateString(undefined, { month: "short", day: "numeric" }));
-    data.push(byDate[key] || 0);
+    data.push(byDate[localKey(d)] || 0);
   }
   return { labels, data };
+}
+
+// Count-based metrics shown on the stat cards.
+function metrics(entries) {
+  return {
+    total:     entries.length,
+    open:      entries.filter(isOpen).length,
+    resolved:  entries.filter(isResolved).length,
+    incidents: entries.filter(e => e.eventType === "Incident").length,
+  };
+}
+
+// Keep entries whose date falls within [from, to]; either bound may be null (unbounded).
+function entriesInRange(entries, from, to) {
+  if (!from && !to) return entries.slice();
+  return entries.filter(e => {
+    const d = parseLocalDate(e.date);
+    if (!d) return false;
+    if (from && d < from) return false;
+    if (to && d > to)     return false;
+    return true;
+  });
+}
+
+// Resolve the dashboard's selected period into current + previous date ranges.
+function getDashRange() {
+  const sel = document.getElementById("dash-range").value;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let from = null, to = null, label = "", title = "";
+
+  if (sel === "all") {
+    return { from: null, to: null, prevFrom: null, prevTo: null, label: "", title: "all time" };
+  } else if (sel === "custom") {
+    const f = document.getElementById("dash-from").value;
+    const t = document.getElementById("dash-to").value;
+    from = f ? parseLocalDate(f) : null;
+    to   = t ? parseLocalDate(t) : new Date(today);
+    label = "vs prev period";
+    title = (from ? from.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "start")
+          + " – " + to.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } else if (sel === "month") {
+    from = new Date(today.getFullYear(), today.getMonth(), 1);
+    to   = new Date(today);
+    label = "vs prev period";
+    title = "this month";
+  } else {
+    const n = parseInt(sel, 10);   // 7 or 30
+    to   = new Date(today);
+    from = new Date(today); from.setDate(today.getDate() - (n - 1));
+    label = n === 7 ? "vs last week" : `vs prev ${n} days`;
+    title = `last ${n} days`;
+  }
+
+  let prevFrom = null, prevTo = null;
+  if (from && to) {
+    const DAY = 86400000;
+    const lenDays = Math.round((to - from) / DAY) + 1;
+    prevTo   = new Date(from.getTime() - DAY);
+    prevFrom = new Date(prevTo.getTime() - (lenDays - 1) * DAY);
+    prevFrom.setHours(0, 0, 0, 0); prevTo.setHours(0, 0, 0, 0);
+  }
+  return { from, to, prevFrom, prevTo, label, title };
+}
+
+// Small ▲/▼ badge comparing a metric to the previous period.
+// good = "up" | "down" sets the green/red sense; omit for neutral coloring.
+function deltaBadge(cur, prev, label, good) {
+  if (!label) return "";
+  const diff = cur - prev;
+  let cls = "flat";
+  if (diff !== 0 && good) cls = ((diff > 0 && good === "up") || (diff < 0 && good === "down")) ? "good" : "bad";
+  else if (diff !== 0)    cls = "neutral";
+  const arrow = diff > 0 ? "▲" : diff < 0 ? "▼" : "▬";
+  const sign  = diff > 0 ? "+" : "";
+  return `<div class="stat-delta ${cls}">${arrow} ${sign}${diff}<span class="stat-delta-label"> ${label}</span></div>`;
+}
+
+// Dashboard filter controls.
+function onDashRangeChange() {
+  const custom = document.getElementById("dash-range").value === "custom";
+  ["dash-from", "dash-dash", "dash-to"].forEach(id =>
+    document.getElementById(id).classList.toggle("hidden", !custom));
+  renderDashboard();
+}
+function onDashCustom() {
+  document.getElementById("dash-range").value = "custom";
+  ["dash-from", "dash-dash", "dash-to"].forEach(id =>
+    document.getElementById(id).classList.remove("hidden"));
+  renderDashboard();
 }
 
 // Average time between submission and resolution, in ms (null if none resolved).
@@ -502,24 +613,27 @@ async function renderDashboard() {
     return;
   }
 
-  const total    = allEntries.length;
-  const open     = allEntries.filter(isOpen).length;
-  const resolved = allEntries.filter(isResolved).length;
-  const incidents = allEntries.filter(e => e.eventType === "Incident").length;
+  // Scope every stat and chart to the selected period, and compare to the
+  // previous equal-length period for the delta badges.
+  const { from, to, prevFrom, prevTo, label, title } = getDashRange();
+  const cur  = entriesInRange(allEntries, from, to);
+  const prev = entriesInRange(allEntries, prevFrom, prevTo);
+  const m = metrics(cur);
+  const p = metrics(prev);
 
-  const wd = weekdayCounts(allEntries);
-  const hc = hourCounts(allEntries);
+  const wd = weekdayCounts(cur);
+  const hc = hourCounts(cur);
   const wdPeak = peakIndex(wd);
   const hcPeak = peakIndex(hc);
   const busiestDay = wdPeak >= 0 ? WEEKDAYS[wdPeak] : "—";
   const peakTime   = hcPeak >= 0 ? formatHour(hcPeak) : "—";
-  const avgResStr  = fmtDuration(avgResolutionMs(allEntries));
+  const avgResStr  = fmtDuration(avgResolutionMs(cur));
 
   document.getElementById("stat-grid").innerHTML = `
-    <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Total Entries</div></div>
-    <div class="stat-card ${open ? "alert" : ""}"><div class="stat-value">${open}</div><div class="stat-label">Open Follow-Ups</div></div>
-    <div class="stat-card"><div class="stat-value">${resolved}</div><div class="stat-label">Resolved Follow-Ups</div></div>
-    <div class="stat-card"><div class="stat-value">${incidents}</div><div class="stat-label">Incidents Logged</div></div>
+    <div class="stat-card"><div class="stat-value">${m.total}</div><div class="stat-label">Total Entries</div>${deltaBadge(m.total, p.total, label)}</div>
+    <div class="stat-card ${m.open ? "alert" : ""}"><div class="stat-value">${m.open}</div><div class="stat-label">Open Follow-Ups</div>${deltaBadge(m.open, p.open, label, "down")}</div>
+    <div class="stat-card"><div class="stat-value">${m.resolved}</div><div class="stat-label">Resolved Follow-Ups</div>${deltaBadge(m.resolved, p.resolved, label, "up")}</div>
+    <div class="stat-card"><div class="stat-value">${m.incidents}</div><div class="stat-label">Incidents Logged</div>${deltaBadge(m.incidents, p.incidents, label, "down")}</div>
     <div class="stat-card"><div class="stat-value">${busiestDay}</div><div class="stat-label">Busiest Day</div></div>
     <div class="stat-card"><div class="stat-value">${peakTime}</div><div class="stat-label">Peak Time</div></div>
     <div class="stat-card"><div class="stat-value">${avgResStr}</div><div class="stat-label">Avg. Resolution Time</div></div>
@@ -527,23 +641,24 @@ async function renderDashboard() {
 
   const palette = ["#2563eb","#ea580c","#9333ea","#ca8a04","#16a34a","#dc2626","#0891b2","#64748b"];
 
-  const ev = countBy(allEntries, "eventType");
+  const ev = countBy(cur, "eventType");
   drawChart("chart-event", "bar", Object.keys(ev), Object.values(ev), palette);
 
-  const ca = countBy(allEntries, "campus");
+  const ca = countBy(cur, "campus");
   drawChart("chart-campus", "bar", Object.keys(ca), Object.values(ca), palette);
 
-  const none = allEntries.filter(e => e.followUpNeeded === "No").length;
+  const none = cur.filter(e => e.followUpNeeded === "No").length;
   drawChart("chart-followup", "doughnut",
-    ["Open","Resolved","Not needed"], [open, resolved, none],
+    ["Open","Resolved","Not needed"], [m.open, m.resolved, none],
     ["#dc2626","#16a34a","#cbd5e1"]);
 
-  const sh = countBy(allEntries, "shift");
+  const sh = countBy(cur, "shift");
   drawChart("chart-shift", "bar", Object.keys(sh), Object.values(sh), palette);
 
   drawChart("chart-weekday", "bar", WEEKDAYS, wd, "#2563eb");
   drawChart("chart-hour", "bar", HOUR_LABELS, hc, "#0891b2");
 
-  const trend = dailyTrend(allEntries, 14);
+  document.getElementById("trend-title").textContent = `Entries Over Time (${title})`;
+  const trend = dailyTrendRange(cur, from, to);
   drawChart("chart-trend", "line", trend.labels, trend.data);
 }

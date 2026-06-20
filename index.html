@@ -189,6 +189,19 @@
 
     <!-- Dashboard Tab -->
     <main id="tab-dashboard" class="tab-content hidden">
+      <div class="dash-filters">
+        <label for="dash-range" class="dash-filters-label">Period</label>
+        <select id="dash-range" onchange="onDashRangeChange()">
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="month">This month</option>
+          <option value="all">All time</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <input type="date" id="dash-from" class="hidden" onchange="onDashCustom()" />
+        <span id="dash-dash" class="hidden">–</span>
+        <input type="date" id="dash-to" class="hidden" onchange="onDashCustom()" />
+      </div>
       <div class="stat-grid" id="stat-grid"></div>
       <div class="chart-grid">
         <div class="card chart-card">
@@ -216,7 +229,7 @@
           <canvas id="chart-hour"></canvas>
         </div>
         <div class="card chart-card chart-card-wide">
-          <h3>Entries Over Time (last 14 days)</h3>
+          <h3 id="trend-title">Entries Over Time</h3>
           <canvas id="chart-trend"></canvas>
         </div>
       </div>
