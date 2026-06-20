@@ -19,6 +19,46 @@ const IDB_STORE     = "pending";
 // The app degrades gracefully if the API is unreachable.
 const ML_API = "http://localhost:8000";
 
+// ── Dark mode ─────────────────────────────────────────────
+const THEME_KEY = "shiftlog_theme";
+
+function applyTheme(theme, animate) {
+  if (animate) {
+    document.body.classList.add("theme-transitioning");
+    setTimeout(() => document.body.classList.remove("theme-transitioning"), 300);
+  }
+  document.documentElement.setAttribute("data-theme", theme);
+
+  const btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = theme === "dark" ? "☀️" : "🌙";
+
+  // Keep Chart.js tick/grid colours in sync if the library is loaded
+  if (typeof Chart !== "undefined") {
+    Chart.defaults.color       = theme === "dark" ? "#94a3b8" : "#64748b";
+    Chart.defaults.borderColor = theme === "dark" ? "#334155" : "#dde2ea";
+    // Re-render the dashboard if it is currently visible so charts pick up new colours
+    const dash = document.getElementById("tab-dashboard");
+    if (dash && !dash.classList.contains("hidden")) renderDashboard();
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme") || "light";
+  const next    = current === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next, true);
+}
+
+// Restore saved preference (or respect system preference) immediately on load
+(function () {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved) {
+    applyTheme(saved, false);
+  } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    applyTheme("dark", false);
+  }
+})();
+
 // ── PWA service worker ────────────────────────────────────
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
