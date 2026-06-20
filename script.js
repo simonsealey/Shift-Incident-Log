@@ -7,6 +7,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const CORRECT_PIN = "1474";
 const SESSION_KEY = "shiftlog_auth";
+const NAME_KEY    = "shiftlog_staff_name";  // remembers the BHT's name per-device
 
 // ── PIN Gate ──────────────────────────────────────────────
 
@@ -81,6 +82,10 @@ function setDefaults() {
   const t  = `${hh}:${mm}`;
   document.getElementById("time").value  = t;
   document.getElementById("shift").value = shiftForTime(t);
+
+  // Remember the staff member's name on this device so they don't retype it.
+  const savedName = localStorage.getItem(NAME_KEY);
+  if (savedName) document.getElementById("staff-name").value = savedName;
 }
 
 // Keep the shift in sync if the user edits the time manually.
@@ -114,6 +119,8 @@ document.getElementById("entry-form").addEventListener("submit", async (e) => {
   try {
     const { error } = await db.from("shift_log").insert(row);
     if (error) throw error;
+
+    if (row.staff_name) localStorage.setItem(NAME_KEY, row.staff_name);
 
     statusEl.textContent = "Entry submitted successfully.";
     statusEl.className = "status-msg success";
