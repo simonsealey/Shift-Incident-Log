@@ -126,6 +126,7 @@ let _realtimeChannel = null;
 
 function subscribeRealtime() {
   if (_realtimeChannel) return;
+  try {
 
   _realtimeChannel = db
     .channel("shift_log_live")
@@ -152,10 +153,15 @@ function subscribeRealtime() {
       }
     )
     .subscribe();
+  } catch (e) {
+    // Realtime not configured for this table — live updates silently disabled.
+    _realtimeChannel = null;
+  }
 }
 
 function showRealtimeToast(msg) {
   const toast = document.getElementById("rt-toast");
+  if (!toast) return;
   toast.textContent = msg;
   toast.classList.add("show");
   setTimeout(() => toast.classList.remove("show"), 3000);
@@ -241,7 +247,7 @@ function showMlPanel(d) {
 }
 
 function hideMlPanel() {
-  document.getElementById("ml-panel").classList.add("hidden");
+  document.getElementById("ml-panel")?.classList.add("hidden");
 }
 
 // ── Form Submission ───────────────────────────────────────
