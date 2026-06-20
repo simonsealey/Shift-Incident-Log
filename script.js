@@ -576,15 +576,16 @@ async function scoreAnomalies(entries) {
     const results = await res.json();
 
     results.forEach(({ id, is_anomaly }) => {
-      const badge = document.getElementById(`anomaly-badge-${id}`);
-      if (!badge) return;
-      if (is_anomaly) {
-        badge.className = "anomaly-badge";
-        badge.textContent = "⚠ Unusual";
-        badge.title = "This narrative looks unusual compared to historical entries";
-      } else {
-        badge.className = "hidden";
-      }
+      // Update both table and card badges (duplicate-ID-safe via data attribute)
+      document.querySelectorAll(`[data-anomaly-id="${id}"]`).forEach(badge => {
+        if (is_anomaly) {
+          badge.className = "anomaly-badge";
+          badge.textContent = "⚠ Unusual";
+          badge.title = "This narrative looks unusual compared to historical entries";
+        } else {
+          badge.className = "hidden";
+        }
+      });
     });
   } catch {
     // API unavailable — no badges shown, no error surfaced
@@ -599,25 +600,22 @@ function renderTable(entries) {
     return;
   }
 
-  const rows = entries.map(r => {
-    let followCell;
-    if (r._pending) {
-      followCell = `<span class="badge badge-pending">Pending sync</span>`;
-    } else if (isOpen(r)) {
-      followCell = `<div class="followup-cell">
+  // Build follow-up cell/block (shared between table and cards)
+  function followHtml(r) {
+    if (r._pending) return `<span class="badge badge-pending">Pending sync</span>`;
+    if (isOpen(r))  return `<div class="followup-cell">
         <span class="badge badge-open">Open</span>
         <button class="resolve-btn" onclick="openResolveModal(${r.id})">Resolve</button>
       </div>`;
-    } else if (isResolved(r)) {
-      followCell = `<div class="followup-cell">
+    if (isResolved(r)) return `<div class="followup-cell">
         <span class="badge badge-resolved">Resolved</span>
         <span class="resolved-meta">by ${escapeHtml(r.resolvedBy) || "—"}<br>${fmtDate(r.resolvedAt)}</span>
       </div>`;
-    } else {
-      followCell = `<span class="badge badge-no">No</span>`;
-    }
+    return `<span class="badge badge-no">No</span>`;
+  }
 
-    return `
+  // ── Desktop table ──────────────────────────────────────────
+  const rows = entries.map(r => `
     <tr class="${r._pending ? "row-pending" : ""}" data-id="${r.id ?? ""}">
       <td>${escapeHtml(r.date)}</td>
       <td>${escapeHtml(r.shift)}</td>
@@ -627,32 +625,59 @@ function renderTable(entries) {
       <td><span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span></td>
       <td style="min-width:340px;max-width:480px;white-space:pre-wrap">
         ${escapeHtml(r.narrative)}
-        <span id="anomaly-badge-${r.id}" class="hidden"></span>
+        <span data-anomaly-id="${r.id}" class="hidden"></span>
       </td>
       <td>${attachmentsCell(r)}</td>
-      <td>${followCell}</td>
+      <td>${followHtml(r)}</td>
       <td>${escapeHtml(r.followUpNotes)}${isResolved(r) && r.resolutionNotes ? `<div class="resolution-note"><strong>Resolution:</strong> ${escapeHtml(r.resolutionNotes)}</div>` : ""}</td>
-    </tr>`;
+    </tr>`).join("");
+
+  // ── Mobile cards ───────────────────────────────────────────
+  const cards = entries.map(r => {
+    const notesHtml = r.followUpNotes
+      ? `<div class="log-card-notes"><span class="log-card-notes-label">Notes:</span> ${escapeHtml(r.followUpNotes)}</div>`
+      : "";
+    const resolutionHtml = isResolved(r) && r.resolutionNotes
+      ? `<div class="log-card-notes log-card-resolution"><span class="log-card-notes-label">Resolution:</span> ${escapeHtml(r.resolutionNotes)}</div>`
+      : "";
+    const filesHtml = attachmentsCell(r)
+      ? `<div class="log-card-files">${attachmentsCell(r)}</div>`
+      : "";
+
+    return `
+    <div class="log-card ${r._pending ? "log-card-pending" : ""}" data-id="${r.id ?? ""}">
+      <div class="log-card-top">
+        <span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span>
+        <span class="log-card-meta">${escapeHtml(r.date)} &middot; ${escapeHtml(r.shift)} &middot; ${escapeHtml(r.time)}</span>
+      </div>
+      <div class="log-card-narrative">
+        ${escapeHtml(r.narrative)}
+        <span data-anomaly-id="${r.id}" class="hidden"></span>
+      </div>
+      <div class="log-card-footer">
+        <span class="log-card-who">${escapeHtml(r.name)} &middot; ${escapeHtml(r.campus)}</span>
+        <div class="log-card-followup">${followHtml(r)}</div>
+      </div>
+      ${notesHtml}
+      ${resolutionHtml}
+      ${filesHtml}
+    </div>`;
   }).join("");
 
   wrap.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Shift</th>
-          <th>Time</th>
-          <th>Name</th>
-          <th>Campus</th>
-          <th>Event Type</th>
-          <th>Narrative</th>
-          <th>Files</th>
-          <th>Follow-Up</th>
-          <th>Notes / Assigned To</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div class="log-table-desktop">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>Shift</th><th>Time</th><th>Name</th><th>Campus</th>
+            <th>Event Type</th><th>Narrative</th><th>Files</th><th>Follow-Up</th>
+            <th>Notes / Assigned To</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="log-cards-mobile">${cards}</div>
   `;
 }
 
