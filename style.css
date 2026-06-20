@@ -408,3 +408,4 @@ tbody td { padding: 10px 12px; vertical-align: top; }
 }
 .chart-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
 .chart-card canvas { max-height: 260px; }
+.chart-card-wide { grid-column: 1 / -1; }

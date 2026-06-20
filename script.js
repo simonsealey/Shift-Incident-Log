@@ -187,6 +187,7 @@ async function fetchEntries() {
     resolvedBy:     r.resolved_by,
     resolvedAt:     r.resolved_at,
     resolutionNotes:r.resolution_notes,
+    createdAt:      r.created_at,
   }));
   return allEntries;
 }
@@ -396,20 +397,100 @@ function countBy(entries, key) {
 
 function drawChart(id, type, labels, data, colors) {
   if (charts[id]) charts[id].destroy();
+  const isLine = type === "line";
   charts[id] = new Chart(document.getElementById(id), {
     type,
     data: {
       labels,
-      datasets: [{ data, backgroundColor: colors, borderWidth: 0 }],
+      datasets: [{
+        data,
+        backgroundColor: isLine ? "rgba(37,99,235,.12)" : colors,
+        borderColor:     isLine ? "#2563eb" : undefined,
+        borderWidth:     isLine ? 2 : 0,
+        fill:            isLine,
+        tension:         isLine ? 0.3 : 0,
+        pointRadius:     isLine ? 2 : undefined,
+        pointBackgroundColor: isLine ? "#2563eb" : undefined,
+      }],
     },
     options: {
       responsive: true,
       plugins: { legend: { display: type === "doughnut" } },
-      scales: type === "bar"
+      scales: (type === "bar" || isLine)
         ? { y: { beginAtZero: true, ticks: { precision: 0 } } }
         : {},
     },
   });
+}
+
+// Parse a "YYYY-MM-DD" string as a LOCAL date (avoids the UTC off-by-one).
+function parseLocalDate(s) {
+  if (!s) return null;
+  const [y, m, d] = String(s).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+// Counts of entries per weekday, Monday-first.
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function weekdayCounts(entries) {
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  entries.forEach(e => {
+    const d = parseLocalDate(e.date);
+    if (d) counts[(d.getDay() + 6) % 7]++;   // getDay: 0=Sun -> Mon-first index
+  });
+  return counts;
+}
+
+// Counts of entries per hour (0-23) from the "HH:MM" time field.
+const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => (h % 12 || 12) + (h < 12 ? "a" : "p"));
+function hourCounts(entries) {
+  const counts = new Array(24).fill(0);
+  entries.forEach(e => {
+    const h = e.time ? parseInt(e.time.split(":")[0], 10) : NaN;
+    if (!isNaN(h) && h >= 0 && h < 24) counts[h]++;
+  });
+  return counts;
+}
+function formatHour(h) {
+  const ampm = h < 12 ? "AM" : "PM";
+  return `${h % 12 || 12} ${ampm}`;
+}
+
+// Index of the largest value, or -1 if every bucket is empty.
+function peakIndex(arr) {
+  const max = Math.max(...arr);
+  return max > 0 ? arr.indexOf(max) : -1;
+}
+
+// Daily entry counts for the last `days` days, ending today (continuous series).
+function dailyTrend(entries, days) {
+  const byDate = {};
+  entries.forEach(e => { if (e.date) byDate[e.date] = (byDate[e.date] || 0) + 1; });
+  const labels = [], data = [];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    labels.push(d.toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+    data.push(byDate[key] || 0);
+  }
+  return { labels, data };
+}
+
+// Average time between submission and resolution, in ms (null if none resolved).
+function avgResolutionMs(entries) {
+  const rows = entries.filter(e => e.resolved && e.resolvedAt && e.createdAt);
+  if (!rows.length) return null;
+  const sum = rows.reduce((s, e) => s + Math.max(0, new Date(e.resolvedAt) - new Date(e.createdAt)), 0);
+  return sum / rows.length;
+}
+function fmtDuration(ms) {
+  if (ms == null) return "—";
+  const hrs = ms / 3600000;
+  if (hrs < 1)  return `${Math.round(ms / 60000)} min`;
+  if (hrs < 24) return `${Math.round(hrs * 10) / 10} hr`;
+  return `${Math.round(hrs / 24 * 10) / 10} days`;
 }
 
 async function renderDashboard() {
@@ -426,11 +507,22 @@ async function renderDashboard() {
   const resolved = allEntries.filter(isResolved).length;
   const incidents = allEntries.filter(e => e.eventType === "Incident").length;
 
+  const wd = weekdayCounts(allEntries);
+  const hc = hourCounts(allEntries);
+  const wdPeak = peakIndex(wd);
+  const hcPeak = peakIndex(hc);
+  const busiestDay = wdPeak >= 0 ? WEEKDAYS[wdPeak] : "—";
+  const peakTime   = hcPeak >= 0 ? formatHour(hcPeak) : "—";
+  const avgResStr  = fmtDuration(avgResolutionMs(allEntries));
+
   document.getElementById("stat-grid").innerHTML = `
     <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Total Entries</div></div>
     <div class="stat-card ${open ? "alert" : ""}"><div class="stat-value">${open}</div><div class="stat-label">Open Follow-Ups</div></div>
     <div class="stat-card"><div class="stat-value">${resolved}</div><div class="stat-label">Resolved Follow-Ups</div></div>
     <div class="stat-card"><div class="stat-value">${incidents}</div><div class="stat-label">Incidents Logged</div></div>
+    <div class="stat-card"><div class="stat-value">${busiestDay}</div><div class="stat-label">Busiest Day</div></div>
+    <div class="stat-card"><div class="stat-value">${peakTime}</div><div class="stat-label">Peak Time</div></div>
+    <div class="stat-card"><div class="stat-value">${avgResStr}</div><div class="stat-label">Avg. Resolution Time</div></div>
   `;
 
   const palette = ["#2563eb","#ea580c","#9333ea","#ca8a04","#16a34a","#dc2626","#0891b2","#64748b"];
@@ -448,4 +540,10 @@ async function renderDashboard() {
 
   const sh = countBy(allEntries, "shift");
   drawChart("chart-shift", "bar", Object.keys(sh), Object.values(sh), palette);
+
+  drawChart("chart-weekday", "bar", WEEKDAYS, wd, "#2563eb");
+  drawChart("chart-hour", "bar", HOUR_LABELS, hc, "#0891b2");
+
+  const trend = dailyTrend(allEntries, 14);
+  drawChart("chart-trend", "line", trend.labels, trend.data);
 }
