@@ -104,14 +104,20 @@
             </div>
 
             <div class="field full-width">
-              <label for="narrative">Narrative</label>
+              <div class="narrative-label-row">
+                <label for="narrative">Narrative</label>
+                <span id="ai-status" class="ai-status ai-offline" title="AI server offline — run: cd ml &amp;&amp; uvicorn api:app --reload">
+                  <span class="ai-dot"></span><span class="ai-status-text">AI offline</span>
+                </span>
+              </div>
               <textarea id="narrative" name="narrative" rows="4" placeholder="Describe the event in detail..." required></textarea>
-              <!-- ML assist panel — appears after ~15 chars are typed -->
+              <!-- ML assist panel — shown while typing, live severity + event suggestion -->
               <div id="ml-panel" class="ml-panel hidden">
                 <span class="ml-label">AI Assist</span>
-                <span id="ml-sev-pill"></span>
+                <span id="ml-sev-pill" class="ml-sev-pill"></span>
                 <span id="ml-ev-chip" class="hidden"></span>
                 <span id="ml-anomaly-flag" class="anomaly-badge hidden" title="This narrative looks unusual compared to historical entries">⚠ Unusual</span>
+                <span id="ml-loading" class="ml-loading hidden">…</span>
               </div>
             </div>
 

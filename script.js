@@ -96,6 +96,7 @@ function showApp() {
   refreshPending();
   flushQueue();          // sync anything that was logged offline
   subscribeRealtime();   // live updates without refresh
+  checkApiHealth();      // show AI status badge on the form
 }
 
 // Allow Enter key on PIN input
@@ -113,6 +114,7 @@ function switchTab(tab) {
   document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
   document.getElementById(`tab-${tab}`).classList.remove("hidden");
   event.target.classList.add("active");
+  if (tab === "submit")    checkApiHealth();
   if (tab === "log")       loadLog();
   if (tab === "dashboard") renderDashboard();
   if (tab === "handoff")   initHandoff();
@@ -172,19 +174,62 @@ function showRealtimeToast(msg) {
 // Degrades silently when the API is not running.
 
 let _mlDebounce = null;
+let _apiOnline   = false;
+
+// Check the ML API health endpoint and update the status badge.
+async function checkApiHealth() {
+  const el = document.getElementById("ai-status");
+  if (!el) return;
+  setAiStatus("checking");
+  try {
+    const res = await fetch(`${ML_API}/health`, { method: "GET", signal: AbortSignal.timeout(2500) });
+    _apiOnline = res.ok;
+  } catch {
+    _apiOnline = false;
+  }
+  setAiStatus(_apiOnline ? "online" : "offline");
+}
+
+function setAiStatus(state) {
+  const el = document.getElementById("ai-status");
+  if (!el) return;
+  el.className = `ai-status ai-${state}`;
+  const textMap = { online: "AI online", offline: "AI offline", checking: "AI checking…" };
+  const tipMap  = {
+    online:   "AI predictions active",
+    offline:  "AI server offline — run: cd ml && uvicorn api:app --reload",
+    checking: "Connecting to AI server…",
+  };
+  el.querySelector(".ai-status-text").textContent = textMap[state] ?? state;
+  el.title = tipMap[state] ?? "";
+}
 
 document.getElementById("narrative").addEventListener("input", (e) => {
   clearTimeout(_mlDebounce);
   const text = e.target.value.trim();
-  if (text.length < 15) { hideMlPanel(); return; }
-  _mlDebounce = setTimeout(() => callMlApi(text), 650);
+  if (text.length < 10) { hideMlPanel(); return; }
+  // Show loading state immediately while waiting for the API
+  showMlLoading();
+  _mlDebounce = setTimeout(() => callMlApi(text), 600);
 });
 
-// Also re-run when the event-type selector changes (severity depends on it)
+// Re-run when the event-type selector changes (severity depends on it)
 document.getElementById("event-type").addEventListener("change", () => {
   const text = document.getElementById("narrative").value.trim();
-  if (text.length >= 15) callMlApi(text);
+  if (text.length >= 10) callMlApi(text);
 });
+
+function showMlLoading() {
+  const panel   = document.getElementById("ml-panel");
+  const loading = document.getElementById("ml-loading");
+  const sevEl   = document.getElementById("ml-sev-pill");
+  const evEl    = document.getElementById("ml-ev-chip");
+  if (!panel) return;
+  if (sevEl)   { sevEl.className = ""; sevEl.innerHTML = ""; }
+  if (evEl)    evEl.classList.add("hidden");
+  if (loading) loading.classList.remove("hidden");
+  panel.classList.remove("hidden");
+}
 
 async function callMlApi(narrative) {
   const eventType = document.getElementById("event-type").value || "Other";
@@ -193,17 +238,23 @@ async function callMlApi(narrative) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ narrative, event_type: eventType }),
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return;
     const d = await res.json();
+    _apiOnline = true;
+    setAiStatus("online");
     showMlPanel(d);
   } catch {
-    // API unavailable — hide panel silently
+    _apiOnline = false;
+    setAiStatus("offline");
     hideMlPanel();
   }
 }
 
 function showMlPanel(d) {
+  const loading = document.getElementById("ml-loading");
+  if (loading) loading.classList.add("hidden");
   const panel = document.getElementById("ml-panel");
 
   // Severity pill

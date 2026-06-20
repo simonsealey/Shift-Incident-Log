@@ -725,3 +725,67 @@ body.theme-transitioning *::after {
   transition: border-color .15s;
 }
 .theme-toggle:hover { border-color: var(--primary); }
+
+/* ── Narrative label row (label + AI status) ─────────────────────────────── */
+.narrative-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0;
+}
+.narrative-label-row label { margin: 0; }
+
+/* AI status indicator */
+.ai-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid transparent;
+  transition: background .3s, color .3s, border-color .3s;
+  cursor: default;
+}
+.ai-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background .3s;
+}
+
+/* States */
+.ai-online  { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.ai-online  .ai-dot { background: #16a34a; }
+.ai-offline { background: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; }
+.ai-offline .ai-dot { background: #cbd5e1; }
+.ai-checking { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.ai-checking .ai-dot { background: #f59e0b; animation: ai-pulse 1s ease-in-out infinite; }
+
+@keyframes ai-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* Dark mode overrides */
+[data-theme="dark"] .ai-online  { background: #052e16; color: #4ade80; border-color: #166534; }
+[data-theme="dark"] .ai-online  .ai-dot { background: #4ade80; }
+[data-theme="dark"] .ai-offline { background: #1e293b; color: #64748b; border-color: #334155; }
+[data-theme="dark"] .ai-offline .ai-dot { background: #475569; }
+[data-theme="dark"] .ai-checking { background: #451a03; color: #fbbf24; border-color: #92400e; }
+[data-theme="dark"] .ai-checking .ai-dot { background: #f59e0b; }
+
+/* Loading dots inside the ML panel */
+.ml-loading {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  animation: ml-blink .8s steps(3, end) infinite;
+}
+@keyframes ml-blink {
+  0%   { opacity: 0.2; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.2; }
+}
