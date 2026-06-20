@@ -105,6 +105,13 @@
             <div class="field full-width">
               <label for="narrative">Narrative</label>
               <textarea id="narrative" name="narrative" rows="4" placeholder="Describe the event in detail..." required></textarea>
+              <!-- ML assist panel — appears after ~15 chars are typed -->
+              <div id="ml-panel" class="ml-panel hidden">
+                <span class="ml-label">AI Assist</span>
+                <span id="ml-sev-pill"></span>
+                <span id="ml-ev-chip" class="hidden"></span>
+                <span id="ml-anomaly-flag" class="anomaly-badge hidden" title="This narrative looks unusual compared to historical entries">⚠ Unusual</span>
+              </div>
             </div>
 
             <div class="field">
@@ -315,6 +322,9 @@
       <p id="resolve-error" class="error hidden"></p>
     </div>
   </div>
+
+  <!-- Realtime "new entry" toast -->
+  <div id="rt-toast" class="rt-toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>

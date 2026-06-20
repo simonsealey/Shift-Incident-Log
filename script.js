@@ -15,6 +15,10 @@ const ATTACH_BUCKET = "attachments";        // Supabase Storage bucket for uploa
 const IDB_NAME      = "shiftlog-offline";   // IndexedDB database for the offline queue
 const IDB_STORE     = "pending";
 
+// ML API — FastAPI service running locally (python -m uvicorn api:app in ml/)
+// The app degrades gracefully if the API is unreachable.
+const ML_API = "http://localhost:8000";
+
 // ── PWA service worker ────────────────────────────────────
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -51,6 +55,7 @@ function showApp() {
   updateNetStatus();
   refreshPending();
   flushQueue();          // sync anything that was logged offline
+  subscribeRealtime();   // live updates without refresh
 }
 
 // Allow Enter key on PIN input
@@ -71,6 +76,132 @@ function switchTab(tab) {
   if (tab === "log")       loadLog();
   if (tab === "dashboard") renderDashboard();
   if (tab === "handoff")   initHandoff();
+}
+
+// ── Supabase Realtime ─────────────────────────────────────
+// Subscribe once after login; re-fetches entries and re-renders live whenever
+// any row on shift_log changes (INSERT / UPDATE / DELETE).
+
+let _realtimeChannel = null;
+
+function subscribeRealtime() {
+  if (_realtimeChannel) return;
+
+  _realtimeChannel = db
+    .channel("shift_log_live")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "shift_log" },
+      async (payload) => {
+        await fetchEntries();
+
+        // Refresh whichever tab is currently visible
+        const logVisible  = !document.getElementById("tab-log").classList.contains("hidden");
+        const dashVisible = !document.getElementById("tab-dashboard").classList.contains("hidden");
+        const hoVisible   = !document.getElementById("tab-handoff").classList.contains("hidden");
+
+        if (logVisible)  applyFilters();
+        if (dashVisible) renderDashboard();
+        if (hoVisible)   generateHandoff();
+
+        // Toast notification
+        if (payload.eventType === "INSERT") {
+          const et = payload.new?.event_type ?? "entry";
+          showRealtimeToast(`New ${et} entry added`);
+        }
+      }
+    )
+    .subscribe();
+}
+
+function showRealtimeToast(msg) {
+  const toast = document.getElementById("rt-toast");
+  toast.textContent = msg;
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 3000);
+}
+
+// ── ML Assist Panel ───────────────────────────────────────
+// Calls the FastAPI service while the user types the narrative.
+// Degrades silently when the API is not running.
+
+let _mlDebounce = null;
+
+document.getElementById("narrative").addEventListener("input", (e) => {
+  clearTimeout(_mlDebounce);
+  const text = e.target.value.trim();
+  if (text.length < 15) { hideMlPanel(); return; }
+  _mlDebounce = setTimeout(() => callMlApi(text), 650);
+});
+
+// Also re-run when the event-type selector changes (severity depends on it)
+document.getElementById("event-type").addEventListener("change", () => {
+  const text = document.getElementById("narrative").value.trim();
+  if (text.length >= 15) callMlApi(text);
+});
+
+async function callMlApi(narrative) {
+  const eventType = document.getElementById("event-type").value || "Other";
+  try {
+    const res = await fetch(`${ML_API}/predict`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ narrative, event_type: eventType }),
+    });
+    if (!res.ok) return;
+    const d = await res.json();
+    showMlPanel(d);
+  } catch {
+    // API unavailable — hide panel silently
+    hideMlPanel();
+  }
+}
+
+function showMlPanel(d) {
+  const panel = document.getElementById("ml-panel");
+
+  // Severity pill
+  const sevEl = document.getElementById("ml-sev-pill");
+  if (d.severity) {
+    const pct = Math.round(d.severity_confidence * 100);
+    sevEl.className = `ml-sev-pill ${d.severity}`;
+    sevEl.innerHTML = `${d.severity} <span class="ml-sev-label">${pct}%</span>`;
+  } else {
+    sevEl.className = "";
+    sevEl.innerHTML = "";
+  }
+
+  // Event-type suggestion chip
+  const evEl = document.getElementById("ml-ev-chip");
+  const currentType = document.getElementById("event-type").value;
+  if (d.event_suggestion && d.event_confidence > 0.45 && d.event_suggestion !== currentType) {
+    const pct = Math.round(d.event_confidence * 100);
+    evEl.className = "ml-ev-chip";
+    evEl.innerHTML = `Try: <span class="ml-ev-chip-accept">${escapeHtml(d.event_suggestion)}</span> (${pct}%)`;
+    evEl.onclick = () => {
+      document.getElementById("event-type").value = d.event_suggestion;
+      evEl.classList.add("hidden");
+      // Re-run with updated event type
+      callMlApi(document.getElementById("narrative").value.trim());
+    };
+    evEl.classList.remove("hidden");
+  } else {
+    evEl.classList.add("hidden");
+  }
+
+  // Anomaly flag
+  const anomEl = document.getElementById("ml-anomaly-flag");
+  if (d.is_anomaly) {
+    anomEl.classList.remove("hidden");
+  } else {
+    anomEl.classList.add("hidden");
+  }
+
+  panel.classList.remove("hidden");
+}
+
+function hideMlPanel() {
+  document.getElementById("ml-panel").classList.add("hidden");
 }
 
 // ── Form Submission ───────────────────────────────────────
@@ -154,6 +285,7 @@ document.getElementById("entry-form").addEventListener("submit", async (e) => {
     statusEl.className = "status-msg success";
     form.reset();
     setDefaults();
+    hideMlPanel();
   } catch (err) {
     if (err && (err.__offline || isNetworkError(err))) {
       // No connection — queue the entry (and its files) locally to sync later.
@@ -305,6 +437,7 @@ function applyFilters() {
 
   renderTable(currentView);
   updateSummary(currentView);
+  scoreAnomalies(currentView);
 }
 
 function clearFilters() {
@@ -322,6 +455,43 @@ function updateSummary(entries) {
       <span class="count">${open}</span> open follow-up${open === 1 ? "" : "s"}
     </span>
   `;
+}
+
+// ── Anomaly scoring ───────────────────────────────────────
+// After the log table renders, batch-score visible entries against the
+// IsolationForest model and overlay a warning badge on unusual narratives.
+// Only scores the most recent 60 entries to keep the API call fast.
+
+async function scoreAnomalies(entries) {
+  // Only score real (non-pending) entries that have an id
+  const scoreable = entries.filter(e => !e._pending && e.id).slice(0, 60);
+  if (!scoreable.length) return;
+
+  try {
+    const res = await fetch(`${ML_API}/anomaly-batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        narratives: scoreable.map(e => ({ id: e.id, text: e.narrative })),
+      }),
+    });
+    if (!res.ok) return;
+    const results = await res.json();
+
+    results.forEach(({ id, is_anomaly }) => {
+      const badge = document.getElementById(`anomaly-badge-${id}`);
+      if (!badge) return;
+      if (is_anomaly) {
+        badge.className = "anomaly-badge";
+        badge.textContent = "⚠ Unusual";
+        badge.title = "This narrative looks unusual compared to historical entries";
+      } else {
+        badge.className = "hidden";
+      }
+    });
+  } catch {
+    // API unavailable — no badges shown, no error surfaced
+  }
 }
 
 function renderTable(entries) {
@@ -351,14 +521,17 @@ function renderTable(entries) {
     }
 
     return `
-    <tr class="${r._pending ? "row-pending" : ""}">
+    <tr class="${r._pending ? "row-pending" : ""}" data-id="${r.id ?? ""}">
       <td>${escapeHtml(r.date)}</td>
       <td>${escapeHtml(r.shift)}</td>
       <td>${escapeHtml(r.time)}</td>
       <td>${escapeHtml(r.name)}</td>
       <td>${escapeHtml(r.campus)}</td>
       <td><span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span></td>
-      <td style="min-width:340px;max-width:480px;white-space:pre-wrap">${escapeHtml(r.narrative)}</td>
+      <td style="min-width:340px;max-width:480px;white-space:pre-wrap">
+        ${escapeHtml(r.narrative)}
+        <span id="anomaly-badge-${r.id}" class="hidden"></span>
+      </td>
       <td>${attachmentsCell(r)}</td>
       <td>${followCell}</td>
       <td>${escapeHtml(r.followUpNotes)}${isResolved(r) && r.resolutionNotes ? `<div class="resolution-note"><strong>Resolution:</strong> ${escapeHtml(r.resolutionNotes)}</div>` : ""}</td>
