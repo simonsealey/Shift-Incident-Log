@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shift & Incident Log</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <!-- PWA: installable + offline-capable -->
   <link rel="manifest" href="manifest.json" />
@@ -19,11 +22,23 @@
   <!-- PIN Gate -->
   <div id="pin-gate">
     <div class="pin-box">
+      <div class="pin-logo">
+        <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="44" height="44" rx="12" fill="#2563eb"/>
+          <rect x="14" y="12" width="16" height="20" rx="2" fill="white" fill-opacity=".2"/>
+          <rect x="14" y="12" width="16" height="20" rx="2" stroke="white" stroke-width="1.5"/>
+          <rect x="17" y="18" width="10" height="1.5" rx=".75" fill="white"/>
+          <rect x="17" y="21.5" width="10" height="1.5" rx=".75" fill="white"/>
+          <rect x="17" y="25" width="7" height="1.5" rx=".75" fill="white"/>
+          <rect x="18" y="9" width="8" height="5" rx="2" fill="white" fill-opacity=".9"/>
+          <rect x="20.5" y="8" width="3" height="3" rx="1.5" fill="#2563eb"/>
+        </svg>
+      </div>
       <h1>Shift & Incident Log</h1>
       <p>Enter your PIN to continue</p>
-      <input type="password" id="pin-input" maxlength="6" placeholder="••••" autocomplete="off" />
-      <button onclick="checkPin()">Enter</button>
-      <p id="pin-error" class="error hidden">Incorrect PIN. Please try again.</p>
+      <input type="password" id="pin-input" maxlength="6" placeholder="••••" autocomplete="off" inputmode="numeric" />
+      <button onclick="checkPin()">Unlock</button>
+      <p id="pin-error" class="error hidden">Incorrect PIN. Try again.</p>
     </div>
   </div>
 
@@ -31,7 +46,23 @@
   <div id="app" class="hidden">
     <header>
       <div class="header-inner">
-        <h1>Shift & Incident Log</h1>
+        <div class="brand">
+          <div class="brand-mark">
+            <svg width="28" height="28" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="44" height="44" rx="10" fill="#2563eb"/>
+              <rect x="14" y="12" width="16" height="20" rx="2" fill="white" fill-opacity=".2"/>
+              <rect x="14" y="12" width="16" height="20" rx="2" stroke="white" stroke-width="1.5"/>
+              <rect x="17" y="18" width="10" height="1.5" rx=".75" fill="white"/>
+              <rect x="17" y="21.5" width="10" height="1.5" rx=".75" fill="white"/>
+              <rect x="17" y="25" width="7" height="1.5" rx=".75" fill="white"/>
+              <rect x="18" y="9" width="8" height="5" rx="2" fill="white" fill-opacity=".9"/>
+              <rect x="20.5" y="8" width="3" height="3" rx="1.5" fill="#2563eb"/>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h1>Shift & Incident Log</h1>
+          </div>
+        </div>
         <div class="header-right">
           <span id="net-status" class="net-status hidden">Offline</span>
           <span id="pending-badge" class="pending-badge hidden"></span>
