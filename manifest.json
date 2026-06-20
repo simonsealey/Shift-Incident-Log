@@ -1,0 +1,19 @@
+{
+  "name": "Shift & Incident Log",
+  "short_name": "Shift Log",
+  "description": "Log shift and incident entries across campuses, track follow-ups, and generate handoff summaries.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f6f9",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}

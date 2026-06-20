@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Shift Log">
+  <rect width="512" height="512" rx="96" fill="#2563eb"/>
+  <rect x="148" y="128" width="216" height="276" rx="28" fill="#ffffff"/>
+  <rect x="206" y="104" width="100" height="56" rx="18" fill="#bfdbfe"/>
+  <rect x="184" y="206" width="144" height="22" rx="11" fill="#cbd5e1"/>
+  <rect x="184" y="252" width="144" height="22" rx="11" fill="#cbd5e1"/>
+  <path d="M186 330 l34 34 l78 -92" fill="none" stroke="#16a34a" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

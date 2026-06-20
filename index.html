@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shift & Incident Log</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- PWA: installable + offline-capable -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Shift Log" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
 </head>
 <body>
 
@@ -24,12 +32,17 @@
     <header>
       <div class="header-inner">
         <h1>Shift & Incident Log</h1>
-        <button class="logout-btn" onclick="logout()">Lock</button>
+        <div class="header-right">
+          <span id="net-status" class="net-status hidden">Offline</span>
+          <span id="pending-badge" class="pending-badge hidden"></span>
+          <button class="logout-btn" onclick="logout()">Lock</button>
+        </div>
       </div>
       <nav>
         <button class="tab-btn active" onclick="switchTab('submit')">Submit Entry</button>
         <button class="tab-btn" onclick="switchTab('log')">View Log</button>
         <button class="tab-btn" onclick="switchTab('dashboard')">Dashboard</button>
+        <button class="tab-btn" onclick="switchTab('handoff')">Handoff</button>
       </nav>
     </header>
 
@@ -105,6 +118,12 @@
             <div class="field">
               <label for="followup-notes">Follow-Up Notes / Assigned To</label>
               <input type="text" id="followup-notes" name="followUpNotes" placeholder="e.g. Assigned to Shift Lead — Jane D." />
+            </div>
+
+            <div class="field full-width">
+              <label for="attach-input">Photos / Documents</label>
+              <input type="file" id="attach-input" multiple accept="image/*,.pdf,.doc,.docx,.txt,.heic" />
+              <span class="muted file-hint">Optional. Attach photos or documents related to this entry.</span>
             </div>
 
           </div>
@@ -232,6 +251,48 @@
           <h3 id="trend-title">Entries Over Time</h3>
           <canvas id="chart-trend"></canvas>
         </div>
+      </div>
+    </main>
+
+    <!-- Handoff Tab -->
+    <main id="tab-handoff" class="tab-content hidden">
+      <div class="card">
+        <h2>Shift Handoff Summary</h2>
+        <p class="muted handoff-intro">Auto-generate a summary for the next shift: what happened this shift plus every open follow-up that still needs attention.</p>
+
+        <div class="filters">
+          <div class="field">
+            <label for="ho-campus">Campus</label>
+            <select id="ho-campus" onchange="generateHandoff()">
+              <option value="">All Campuses</option>
+              <option>Main Campus</option>
+              <option>Phoenix Concept</option>
+              <option>Stepping Stone</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ho-date">Date</label>
+            <input type="date" id="ho-date" onchange="generateHandoff()" />
+          </div>
+          <div class="field">
+            <label for="ho-shift">Shift</label>
+            <select id="ho-shift" onchange="generateHandoff()">
+              <option>Day</option>
+              <option>Evening</option>
+              <option>Overnight</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ho-by">Prepared By</label>
+            <input type="text" id="ho-by" maxlength="60" placeholder="Your name" oninput="generateHandoff()" />
+          </div>
+          <div class="filter-actions">
+            <button class="secondary" onclick="copyHandoff()">Copy</button>
+            <button onclick="printHandoff()">Print</button>
+          </div>
+        </div>
+
+        <div id="handoff-output" class="handoff-output"></div>
       </div>
     </main>
   </div>

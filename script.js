@@ -9,6 +9,18 @@ const CORRECT_PIN = "1474";
 const SESSION_KEY = "shiftlog_auth";
 const NAME_KEY    = "shiftlog_staff_name";  // remembers the BHT's name per-device
 const CAMPUS_KEY  = "shiftlog_campus";      // remembers the last campus per-device
+const CACHE_KEY   = "shiftlog_cache";       // last-fetched entries, for offline viewing
+
+const ATTACH_BUCKET = "attachments";        // Supabase Storage bucket for uploaded files
+const IDB_NAME      = "shiftlog-offline";   // IndexedDB database for the offline queue
+const IDB_STORE     = "pending";
+
+// ── PWA service worker ────────────────────────────────────
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {/* offline support unavailable */});
+  });
+}
 
 // ── PIN Gate ──────────────────────────────────────────────
 
@@ -36,6 +48,9 @@ function showApp() {
   document.getElementById("pin-gate").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   setDefaults();
+  updateNetStatus();
+  refreshPending();
+  flushQueue();          // sync anything that was logged offline
 }
 
 // Allow Enter key on PIN input
@@ -55,6 +70,7 @@ function switchTab(tab) {
   event.target.classList.add("active");
   if (tab === "log")       loadLog();
   if (tab === "dashboard") renderDashboard();
+  if (tab === "handoff")   initHandoff();
 }
 
 // ── Form Submission ───────────────────────────────────────
@@ -119,20 +135,43 @@ document.getElementById("entry-form").addEventListener("submit", async (e) => {
     follow_up_notes:  form.followUpNotes.value.trim(),
   };
 
+  const files = Array.from(document.getElementById("attach-input").files || []);
+
+  // Remember name + campus on this device regardless of how the entry is saved.
+  if (row.staff_name) localStorage.setItem(NAME_KEY, row.staff_name);
+  if (row.campus)     localStorage.setItem(CAMPUS_KEY, row.campus);
+
   try {
-    const { error } = await db.from("shift_log").insert(row);
+    if (!navigator.onLine) throw { __offline: true };
+
+    const attachments = await uploadFiles(files);
+    const { error } = await db.from("shift_log").insert({ ...row, attachments });
     if (error) throw error;
 
-    if (row.staff_name) localStorage.setItem(NAME_KEY, row.staff_name);
-    if (row.campus)     localStorage.setItem(CAMPUS_KEY, row.campus);
-
-    statusEl.textContent = "Entry submitted successfully.";
+    statusEl.textContent = files.length
+      ? `Entry submitted with ${files.length} attachment${files.length > 1 ? "s" : ""}.`
+      : "Entry submitted successfully.";
     statusEl.className = "status-msg success";
     form.reset();
     setDefaults();
   } catch (err) {
-    statusEl.textContent = `Submission failed: ${err.message}`;
-    statusEl.className = "status-msg error-msg";
+    if (err && (err.__offline || isNetworkError(err))) {
+      // No connection — queue the entry (and its files) locally to sync later.
+      try {
+        await idbAdd({ row, files });
+        await refreshPending();
+        statusEl.textContent = "Saved offline — this entry will sync automatically when you're back online.";
+        statusEl.className = "status-msg success";
+        form.reset();
+        setDefaults();
+      } catch (qerr) {
+        statusEl.textContent = `Could not save offline: ${qerr.message}`;
+        statusEl.className = "status-msg error-msg";
+      }
+    } else {
+      statusEl.textContent = `Submission failed: ${err.message}`;
+      statusEl.className = "status-msg error-msg";
+    }
   } finally {
     statusEl.classList.remove("hidden");
     btn.disabled = false;
@@ -164,10 +203,19 @@ function fmtDate(iso) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+// True for fetch/connection failures, so we can fall back to the offline queue.
+function isNetworkError(err) {
+  if (!err) return false;
+  if (err.name === "TypeError") return true;            // e.g. "Failed to fetch"
+  const m = (err.message || "").toLowerCase();
+  return m.includes("failed to fetch") || m.includes("network") || m.includes("load failed");
+}
+
 // ── Log View ──────────────────────────────────────────────
 
-let allEntries = [];   // full dataset
-let currentView = [];  // currently filtered rows (used by CSV export)
+let allEntries = [];     // full dataset from the database (or last cached copy)
+let currentView = [];    // currently filtered rows (used by CSV export)
+let pendingEntries = []; // entries saved offline, awaiting sync
 
 async function fetchEntries() {
   const { data, error } = await db
@@ -191,20 +239,40 @@ async function fetchEntries() {
     resolvedBy:     r.resolved_by,
     resolvedAt:     r.resolved_at,
     resolutionNotes:r.resolution_notes,
+    attachments:    r.attachments || [],
     createdAt:      r.created_at,
   }));
+
+  // Cache a snapshot so the log is viewable offline.
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(allEntries)); } catch (e) {/* quota */}
   return allEntries;
 }
 
 async function loadLog() {
   const wrap = document.getElementById("log-table-wrap");
   wrap.innerHTML = "<p class='muted'>Loading entries...</p>";
+
+  let note = "";
   try {
     await fetchEntries();
-    applyFilters();
   } catch (err) {
-    wrap.innerHTML = `<p class='muted' style='color:#dc2626'>Failed to load entries: ${escapeHtml(err.message)}</p>`;
+    // Offline or the request failed: fall back to the last cached snapshot.
+    const cached = localStorage.getItem(CACHE_KEY);
+    allEntries = cached ? JSON.parse(cached) : [];
+    note = navigator.onLine
+      ? "Couldn't reach the server — showing the last saved copy."
+      : "You're offline — showing the last saved copy.";
   }
+
+  pendingEntries = await getPendingAsEntries();
+
+  const statusEl = document.getElementById("log-status");
+  if (statusEl) {
+    statusEl.textContent = note;
+    statusEl.className = note ? "status-msg error-msg" : "status-msg hidden";
+  }
+
+  applyFilters();
 }
 
 function isOpen(row)     { return row.followUpNeeded === "Yes" && !row.resolved; }
@@ -218,7 +286,8 @@ function applyFilters() {
   const dateFrom = document.getElementById("filter-date-from").value;
   const dateTo   = document.getElementById("filter-date-to").value;
 
-  currentView = allEntries.filter(row => {
+  // Pending (offline) entries appear at the top until they sync.
+  currentView = pendingEntries.concat(allEntries).filter(row => {
     if (campus && row.campus    !== campus) return false;
     if (event  && row.eventType !== event)  return false;
     if (followup === "open"     && !isOpen(row))     return false;
@@ -265,7 +334,9 @@ function renderTable(entries) {
 
   const rows = entries.map(r => {
     let followCell;
-    if (isOpen(r)) {
+    if (r._pending) {
+      followCell = `<span class="badge badge-pending">Pending sync</span>`;
+    } else if (isOpen(r)) {
       followCell = `<div class="followup-cell">
         <span class="badge badge-open">Open</span>
         <button class="resolve-btn" onclick="openResolveModal(${r.id})">Resolve</button>
@@ -280,7 +351,7 @@ function renderTable(entries) {
     }
 
     return `
-    <tr>
+    <tr class="${r._pending ? "row-pending" : ""}">
       <td>${escapeHtml(r.date)}</td>
       <td>${escapeHtml(r.shift)}</td>
       <td>${escapeHtml(r.time)}</td>
@@ -288,6 +359,7 @@ function renderTable(entries) {
       <td>${escapeHtml(r.campus)}</td>
       <td><span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span></td>
       <td style="min-width:340px;max-width:480px;white-space:pre-wrap">${escapeHtml(r.narrative)}</td>
+      <td>${attachmentsCell(r)}</td>
       <td>${followCell}</td>
       <td>${escapeHtml(r.followUpNotes)}${isResolved(r) && r.resolutionNotes ? `<div class="resolution-note"><strong>Resolution:</strong> ${escapeHtml(r.resolutionNotes)}</div>` : ""}</td>
     </tr>`;
@@ -304,6 +376,7 @@ function renderTable(entries) {
           <th>Campus</th>
           <th>Event Type</th>
           <th>Narrative</th>
+          <th>Files</th>
           <th>Follow-Up</th>
           <th>Notes / Assigned To</th>
         </tr>
@@ -361,22 +434,75 @@ async function confirmResolve() {
   }
 }
 
+// ── Attachments (photos / documents) ──────────────────────
+
+// Upload each File to Supabase Storage; return metadata to store on the row.
+async function uploadFiles(files) {
+  if (!files || !files.length) return [];
+  const folder = crypto.randomUUID ? crypto.randomUUID()
+    : String(Date.now()) + Math.random().toString(36).slice(2);
+  const out = [];
+  for (const f of files) {
+    const safe = (f.name || "file").replace(/[^\w.\-]+/g, "_");
+    const path = `${folder}/${Date.now()}_${safe}`;
+    const { error } = await db.storage.from(ATTACH_BUCKET).upload(path, f, {
+      contentType: f.type || undefined,
+      upsert: false,
+    });
+    if (error) throw error;
+    out.push({ path, name: f.name, type: f.type || "", size: f.size || 0 });
+  }
+  return out;
+}
+
+// Build the table cell that lists an entry's attachments.
+function attachmentsCell(r) {
+  if (r._pending) {
+    const n = (r._files && r._files.length) || 0;
+    return n ? `<span class="attach-pending">${n} file${n > 1 ? "s" : ""} (pending)</span>` : "";
+  }
+  const list = r.attachments || [];
+  if (!list.length) return "";
+  return `<div class="attach-list">` + list.map((a, i) => {
+    const name  = a.name || "file";
+    const label = name.length > 20 ? name.slice(0, 18) + "…" : name;
+    return `<button class="attach-chip" title="${escapeHtml(name)}" onclick="openAttachment(${r.id}, ${i})">📎 ${escapeHtml(label)}</button>`;
+  }).join("") + `</div>`;
+}
+
+// Open a private file via a short-lived signed URL.
+async function openAttachment(id, idx) {
+  const entry = allEntries.find(e => String(e.id) === String(id));
+  if (!entry || !entry.attachments || !entry.attachments[idx]) return;
+  try {
+    const { data, error } = await db.storage
+      .from(ATTACH_BUCKET)
+      .createSignedUrl(entry.attachments[idx].path, 120);
+    if (error) throw error;
+    window.open(data.signedUrl, "_blank", "noopener");
+  } catch (err) {
+    alert("Could not open attachment: " + err.message);
+  }
+}
+
 // ── CSV export ────────────────────────────────────────────
 
 function exportCsv() {
   if (!currentView.length) { alert("No entries to export."); return; }
 
   const headers = ["Date","Shift","Time","Name","Campus","Event Type","Narrative",
-                   "Follow-Up Needed","Follow-Up Notes/Assigned To","Resolved","Resolved By","Resolved At","Resolution Notes"];
+                   "Follow-Up Needed","Follow-Up Notes/Assigned To","Resolved","Resolved By","Resolved At","Resolution Notes","Attachments"];
 
   const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
   const lines = [headers.join(",")];
   currentView.forEach(r => {
+    const attachNames = (r.attachments || []).map(a => a.name).join("; ");
     lines.push([
       r.date, r.shift, r.time, r.name, r.campus, r.eventType, r.narrative,
       r.followUpNeeded, r.followUpNotes,
-      r.resolved ? "Yes" : "No", r.resolvedBy, r.resolvedAt ? fmtDate(r.resolvedAt) : "", r.resolutionNotes
+      r.resolved ? "Yes" : "No", r.resolvedBy, r.resolvedAt ? fmtDate(r.resolvedAt) : "", r.resolutionNotes,
+      attachNames
     ].map(cell).join(","));
   });
 
@@ -387,6 +513,304 @@ function exportCsv() {
   a.download = `shift-log-${new Date().toISOString().split("T")[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ── Offline queue & sync ──────────────────────────────────
+// Entries logged without a connection are stored in IndexedDB (with their
+// files) and pushed to Supabase when the connection returns.
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const dbi = req.result;
+      if (!dbi.objectStoreNames.contains(IDB_STORE)) {
+        dbi.createObjectStore(IDB_STORE, { keyPath: "key", autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbAdd(value) {
+  return idbOpen().then(dbi => new Promise((resolve, reject) => {
+    const tx = dbi.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).add({ value, ts: Date.now() });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function idbGetAll() {
+  return idbOpen().then(dbi => new Promise((resolve, reject) => {
+    const tx = dbi.transaction(IDB_STORE, "readonly");
+    const out = [];
+    tx.objectStore(IDB_STORE).openCursor().onsuccess = (e) => {
+      const cur = e.target.result;
+      if (cur) { out.push({ key: cur.key, value: cur.value.value }); cur.continue(); }
+      else resolve(out);
+    };
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function idbDelete(key) {
+  return idbOpen().then(dbi => new Promise((resolve, reject) => {
+    const tx = dbi.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function idbCount() {
+  return idbOpen().then(dbi => new Promise((resolve, reject) => {
+    const tx = dbi.transaction(IDB_STORE, "readonly");
+    const req = tx.objectStore(IDB_STORE).count();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  })).catch(() => 0);
+}
+
+// Map queued records into the same shape the log table renders.
+async function getPendingAsEntries() {
+  let items = [];
+  try { items = await idbGetAll(); } catch (e) { items = []; }
+  return items.map(it => {
+    const r = (it.value && it.value.row) || {};
+    return {
+      id: "pending-" + it.key,
+      _pending: true,
+      _files: (it.value && it.value.files) || [],
+      date: r.date, shift: r.shift, time: r.time,
+      name: r.staff_name, campus: r.campus, eventType: r.event_type,
+      narrative: r.narrative, followUpNeeded: r.follow_up_needed,
+      followUpNotes: r.follow_up_notes,
+      resolved: false, attachments: [],
+    };
+  });
+}
+
+// Show "Offline" in the header when there's no connection.
+function updateNetStatus() {
+  const el = document.getElementById("net-status");
+  if (el) el.classList.toggle("hidden", navigator.onLine);
+}
+
+// Show "N pending sync" in the header.
+async function refreshPending() {
+  const n = await idbCount();
+  const badge = document.getElementById("pending-badge");
+  if (!badge) return;
+  badge.textContent = `${n} pending sync`;
+  badge.classList.toggle("hidden", n === 0);
+}
+
+// Push queued entries to Supabase. Stops on the first failure and retries later.
+let syncing = false;
+async function flushQueue() {
+  if (syncing || !navigator.onLine) return;
+  syncing = true;
+  let synced = 0;
+  try {
+    const items = await idbGetAll();
+    for (const it of items) {
+      try {
+        const attachments = await uploadFiles(it.value.files || []);
+        const { error } = await db.from("shift_log").insert({ ...it.value.row, attachments });
+        if (error) throw error;
+        await idbDelete(it.key);
+        synced++;
+      } catch (e) {
+        break;   // leave this and the rest queued for the next attempt
+      }
+    }
+  } finally {
+    syncing = false;
+    await refreshPending();
+    const logVisible = !document.getElementById("tab-log").classList.contains("hidden");
+    if (synced > 0 && logVisible) loadLog();
+  }
+}
+
+// React to connectivity changes.
+window.addEventListener("online", () => { updateNetStatus(); flushQueue(); });
+window.addEventListener("offline", updateNetStatus);
+
+// ── Shift handoff summary ─────────────────────────────────
+
+let lastHandoffText = "";
+
+function fmtFullDate(s) {
+  const d = parseLocalDate(s);
+  if (!d) return s || "";
+  return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+}
+
+// Rough age of an open follow-up, for triage ("3d open", "5h open").
+function ageLabel(entry) {
+  const base = entry.createdAt ? new Date(entry.createdAt) : parseLocalDate(entry.date);
+  if (!base || isNaN(base)) return "";
+  const ms = Date.now() - base.getTime();
+  if (ms < 0) return "new";
+  const days = Math.floor(ms / 86400000);
+  if (days >= 1) return `${days}d open`;
+  return `${Math.max(1, Math.floor(ms / 3600000))}h open`;
+}
+
+async function initHandoff() {
+  const dateEl = document.getElementById("ho-date");
+  if (!dateEl.value) {
+    const now = new Date();
+    dateEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const t = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    document.getElementById("ho-shift").value = shiftForTime(t);
+  }
+  const byEl = document.getElementById("ho-by");
+  if (!byEl.value) byEl.value = localStorage.getItem(NAME_KEY) || localStorage.getItem("shiftlog_resolver") || "";
+
+  try {
+    if (!allEntries.length) await fetchEntries();
+  } catch (e) {
+    const cached = localStorage.getItem(CACHE_KEY);
+    allEntries = cached ? JSON.parse(cached) : [];
+  }
+  generateHandoff();
+}
+
+function generateHandoff() {
+  const out = document.getElementById("handoff-output");
+  if (!out) return;
+
+  const campus = document.getElementById("ho-campus").value;
+  const date   = document.getElementById("ho-date").value;
+  const shift  = document.getElementById("ho-shift").value;
+  const by     = document.getElementById("ho-by").value.trim();
+
+  if (!date) {
+    out.innerHTML = `<p class="handoff-empty">Pick a date to generate the summary.</p>`;
+    lastHandoffText = "";
+    return;
+  }
+
+  const inScope = (e) => !campus || e.campus === campus;
+  const shiftEntries = allEntries
+    .filter(e => e.date === date && e.shift === shift && inScope(e))
+    .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  const openItems = allEntries
+    .filter(e => isOpen(e) && inScope(e))
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""));   // oldest first = most urgent
+
+  const byType    = countBy(shiftEntries, "eventType");
+  const incidents = byType["Incident"] || 0;
+  const medical   = byType["Medical"] || 0;
+  const behavioral = byType["Behavioral"] || 0;
+  const campusLabel = campus || "All Campuses";
+  const generatedAt = new Date().toLocaleString();
+
+  // On-screen HTML report.
+  const statHtml = `
+    <div class="ho-stats">
+      <span class="ho-stat"><b>${shiftEntries.length}</b> entries this shift</span>
+      <span class="ho-stat ${incidents ? "alert" : ""}"><b>${incidents}</b> incident${incidents === 1 ? "" : "s"}</span>
+      <span class="ho-stat"><b>${medical}</b> medical</span>
+      <span class="ho-stat ${openItems.length ? "alert" : ""}"><b>${openItems.length}</b> open follow-up${openItems.length === 1 ? "" : "s"}</span>
+    </div>`;
+
+  const openHtml = openItems.length
+    ? `<ol class="ho-list">` + openItems.map(e => `
+        <li class="ho-item">
+          <div class="ho-item-head">${escapeHtml(e.eventType)} — ${escapeHtml(e.campus)} <span class="ho-meta">· ${escapeHtml(fmtDate(e.date))} · ${escapeHtml(e.name) || "—"} · <span class="ho-age">${ageLabel(e)}</span></span></div>
+          <div class="ho-item-action"><b>Action:</b> ${escapeHtml(e.followUpNotes) || "—"}</div>
+          <div class="ho-item-note">${escapeHtml(e.narrative)}</div>
+        </li>`).join("") + `</ol>`
+    : `<p class="ho-none">No open follow-ups — nothing outstanding.</p>`;
+
+  const shiftHtml = shiftEntries.length
+    ? `<ul class="ho-list">` + shiftEntries.map(e => {
+        const status = isOpen(e) ? "Follow-up OPEN" : isResolved(e) ? "Follow-up resolved" : "No follow-up";
+        return `
+        <li class="ho-item">
+          <div class="ho-item-head">${escapeHtml(e.time)} · ${escapeHtml(e.eventType)} · ${escapeHtml(e.campus)} <span class="ho-meta">· ${escapeHtml(e.name) || "—"}</span></div>
+          <div class="ho-item-note">${escapeHtml(e.narrative)}</div>
+          <div class="ho-item-action"><b>${status}</b></div>
+        </li>`;
+      }).join("") + `</ul>`
+    : `<p class="ho-none">No entries were logged for this shift.</p>`;
+
+  out.innerHTML = `
+    <div class="ho-report">
+      <div class="ho-title">Shift Handoff — ${escapeHtml(campusLabel)}</div>
+      <div class="ho-sub">${escapeHtml(fmtFullDate(date))} · ${escapeHtml(shift)} shift · Prepared by ${escapeHtml(by) || "—"} · Generated ${escapeHtml(generatedAt)}</div>
+      ${statHtml}
+      <div class="ho-section">
+        <h4>Open follow-ups requiring attention (${openItems.length})</h4>
+        ${openHtml}
+      </div>
+      <div class="ho-section">
+        <h4>Entries this shift (${shiftEntries.length})</h4>
+        ${shiftHtml}
+      </div>
+    </div>`;
+
+  // Plain-text version for copy / print.
+  const L = [];
+  L.push("SHIFT HANDOFF SUMMARY");
+  L.push(`${campusLabel} — ${fmtFullDate(date)} — ${shift} shift`);
+  L.push(`Prepared by: ${by || "—"}`);
+  L.push(`Generated: ${generatedAt}`);
+  L.push("");
+  L.push("SNAPSHOT");
+  L.push(`- Entries this shift: ${shiftEntries.length}`);
+  L.push(`- Incidents: ${incidents}   Medical: ${medical}   Behavioral: ${behavioral}`);
+  L.push(`- Open follow-ups (all dates): ${openItems.length}`);
+  L.push("");
+  L.push(`OPEN FOLLOW-UPS REQUIRING ATTENTION (${openItems.length})`);
+  if (openItems.length) {
+    openItems.forEach((e, i) => {
+      L.push(`${i + 1}. ${fmtDate(e.date)} · ${e.campus} · ${e.eventType} (${ageLabel(e)}, logged by ${e.name || "—"})`);
+      L.push(`   Action: ${e.followUpNotes || "—"}`);
+      L.push(`   Note: ${e.narrative}`);
+    });
+  } else {
+    L.push("None outstanding.");
+  }
+  L.push("");
+  L.push(`ENTRIES THIS SHIFT (${shiftEntries.length})`);
+  if (shiftEntries.length) {
+    shiftEntries.forEach(e => {
+      const status = isOpen(e) ? "Follow-up OPEN" : isResolved(e) ? "Follow-up resolved" : "No follow-up";
+      L.push(`- ${e.time} · ${e.eventType} · ${e.campus} · ${e.name || "—"}`);
+      L.push(`  ${e.narrative}`);
+      L.push(`  ${status}`);
+    });
+  } else {
+    L.push("No entries were logged for this shift.");
+  }
+  lastHandoffText = L.join("\n");
+}
+
+async function copyHandoff() {
+  if (!lastHandoffText) { alert("Generate a summary first."); return; }
+  try {
+    await navigator.clipboard.writeText(lastHandoffText);
+    const btn = window.event && window.event.target;
+    if (btn) { const o = btn.textContent; btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = o; }, 1500); }
+  } catch (e) {
+    alert("Copy failed — you can select the summary text manually.");
+  }
+}
+
+function printHandoff() {
+  if (!lastHandoffText) { alert("Generate a summary first."); return; }
+  const w = window.open("", "_blank");
+  if (!w) { alert("Allow pop-ups to print the summary."); return; }
+  w.document.write(`<pre style="font:13px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;white-space:pre-wrap;padding:24px;margin:0">${escapeHtml(lastHandoffText)}</pre>`);
+  w.document.title = "Shift Handoff Summary";
+  w.document.close();
+  w.focus();
+  w.print();
 }
 
 // ── Dashboard ─────────────────────────────────────────────
