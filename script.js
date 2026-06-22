@@ -614,23 +614,39 @@ function renderTable(entries) {
     return `<span class="badge badge-no">No</span>`;
   }
 
-  // ── Desktop table ──────────────────────────────────────────
-  const rows = entries.map(r => `
+  // ── Desktop table (6 cols: When · Who · Type · Follow-Up · Narrative · Files) ──
+  const rows = entries.map(r => {
+    // Follow-up cell includes notes + resolution so nothing lives off-screen
+    const notesRow = r.followUpNotes
+      ? `<div class="followup-notes">${escapeHtml(r.followUpNotes)}</div>`
+      : "";
+    const resolutionRow = isResolved(r) && r.resolutionNotes
+      ? `<div class="resolution-note"><strong>Resolution:</strong> ${escapeHtml(r.resolutionNotes)}</div>`
+      : "";
+
+    return `
     <tr class="${r._pending ? "row-pending" : ""}" data-id="${r.id ?? ""}">
-      <td>${escapeHtml(r.date)}</td>
-      <td>${escapeHtml(r.shift)}</td>
-      <td>${escapeHtml(r.time)}</td>
-      <td>${escapeHtml(r.name)}</td>
-      <td>${escapeHtml(r.campus)}</td>
+      <td class="col-when">
+        <span class="when-date">${escapeHtml(r.date)}</span>
+        <span class="when-meta">${escapeHtml(r.shift)} &middot; ${escapeHtml(r.time)}</span>
+      </td>
+      <td class="col-who">
+        <span class="who-name">${escapeHtml(r.name)}</span>
+        <span class="who-campus">${escapeHtml(r.campus)}</span>
+      </td>
       <td><span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span></td>
-      <td style="min-width:340px;max-width:480px;white-space:pre-wrap">
+      <td class="col-followup">
+        ${followHtml(r)}
+        ${notesRow}
+        ${resolutionRow}
+      </td>
+      <td class="col-narrative">
         ${escapeHtml(r.narrative)}
         <span data-anomaly-id="${r.id}" class="hidden"></span>
       </td>
       <td>${attachmentsCell(r)}</td>
-      <td>${followHtml(r)}</td>
-      <td>${escapeHtml(r.followUpNotes)}${isResolved(r) && r.resolutionNotes ? `<div class="resolution-note"><strong>Resolution:</strong> ${escapeHtml(r.resolutionNotes)}</div>` : ""}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 
   // ── Mobile cards ───────────────────────────────────────────
   const cards = entries.map(r => {
@@ -669,9 +685,12 @@ function renderTable(entries) {
       <table>
         <thead>
           <tr>
-            <th>Date</th><th>Shift</th><th>Time</th><th>Name</th><th>Campus</th>
-            <th>Event Type</th><th>Narrative</th><th>Files</th><th>Follow-Up</th>
-            <th>Notes / Assigned To</th>
+            <th>When</th>
+            <th>Who</th>
+            <th>Type</th>
+            <th>Follow-Up</th>
+            <th>Narrative</th>
+            <th>Files</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>

@@ -438,6 +438,34 @@ tbody td { padding: 11px 14px; vertical-align: top; line-height: 1.5; }
 
 .resolved-meta { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
 
+/* ── Condensed table columns ── */
+.col-when { white-space: nowrap; min-width: 110px; }
+.when-date { display: block; font-weight: 600; font-size: 13.5px; color: var(--text); }
+.when-meta { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+.col-who { white-space: nowrap; min-width: 120px; }
+.who-name   { display: block; font-weight: 600; font-size: 13.5px; color: var(--text); }
+.who-campus { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+.col-followup { min-width: 140px; max-width: 220px; }
+.followup-notes {
+  font-size: 12px;
+  color: var(--text-soft);
+  margin-top: 6px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.col-narrative {
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-width: 200px;
+  max-width: 420px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
 .resolution-note {
   font-size: 12px;
   color: var(--text);
