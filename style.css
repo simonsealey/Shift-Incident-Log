@@ -1176,6 +1176,11 @@ body.theme-transitioning *::after {
   transition: border-color var(--transition), color var(--transition);
 }
 .comment-toggle-btn:hover { border-color: var(--primary); color: var(--primary); }
+.comment-toggle-btn.has-comments {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-soft);
+}
 
 .comment-tr .comment-td {
   padding: 0;

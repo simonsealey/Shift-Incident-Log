@@ -584,6 +584,7 @@ function applyFilters() {
   renderTable(currentView);
   updateSummary(currentView);
   scoreAnomalies(currentView);
+  loadCommentCounts(currentView);
 }
 
 function clearFilters() {
@@ -695,7 +696,7 @@ function renderTable(entries) {
         ${followHtml(r)}
         ${notesRow}
         ${resolutionRow}
-        ${!r._pending ? `<button class="comment-toggle-btn" onclick="toggleComments(${r.id})">💬 Comments</button>` : ""}
+        ${!r._pending ? `<button class="comment-toggle-btn" onclick="toggleComments(${r.id})" data-entry-id="${r.id}">💬 Comments</button>` : ""}
       </td>
       <td class="col-narrative">
         ${escapeHtml(r.narrative)}
@@ -742,7 +743,7 @@ function renderTable(entries) {
       ${filesHtml}
       ${!r._pending ? `
       <div class="log-card-comment-section">
-        <button class="comment-toggle-btn" onclick="toggleComments(${r.id})">💬 Comments</button>
+        <button class="comment-toggle-btn" onclick="toggleComments(${r.id})" data-entry-id="${r.id}">💬 Comments</button>
         <div class="comment-panel" data-comment-panel="${r.id}" style="display:none"></div>
       </div>` : ""}
     </div>`;
@@ -766,6 +767,37 @@ function renderTable(entries) {
     </div>
     <div class="log-cards-mobile">${cards}</div>
   `;
+}
+
+// ── Comment counts ────────────────────────────────────────
+// After the log renders, fetch how many comments exist per entry and
+// update each toggle button so staff can see activity at a glance.
+
+async function loadCommentCounts(entries) {
+  const ids = entries.filter(e => !e._pending && e.id).map(e => e.id);
+  if (!ids.length) return;
+  try {
+    const { data, error } = await db
+      .from("entry_comments")
+      .select("entry_id")
+      .in("entry_id", ids);
+    if (error) return;
+
+    const counts = {};
+    (data || []).forEach(r => {
+      counts[r.entry_id] = (counts[r.entry_id] || 0) + 1;
+    });
+
+    document.querySelectorAll(".comment-toggle-btn[data-entry-id]").forEach(btn => {
+      const count = counts[btn.dataset.entryId] || 0;
+      btn.textContent = count > 0
+        ? `💬 ${count} comment${count === 1 ? "" : "s"}`
+        : "💬 Comments";
+      btn.classList.toggle("has-comments", count > 0);
+    });
+  } catch {
+    // Non-critical — buttons just stay as "💬 Comments"
+  }
 }
 
 // ── Comment threads ───────────────────────────────────────
