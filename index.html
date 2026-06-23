@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=12" />
+  <link rel="stylesheet" href="style.css?v=13" />
   <!-- PWA: installable + offline-capable -->
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#2563eb" />
@@ -137,11 +137,15 @@
             <div class="field full-width">
               <div class="narrative-label-row">
                 <label for="narrative">Narrative</label>
-                <span id="ai-status" class="ai-status ai-offline" title="AI assist requires the local ML server to be running on this machine">
-                  <span class="ai-dot"></span><span class="ai-status-text">AI offline</span>
-                </span>
+                <div class="narrative-label-right">
+                  <button type="button" id="mic-btn" class="mic-btn" onclick="toggleVoice()" title="Voice to text">🎤</button>
+                  <span id="ai-status" class="ai-status ai-offline" title="AI assist requires the local ML server to be running on this machine">
+                    <span class="ai-dot"></span><span class="ai-status-text">AI offline</span>
+                  </span>
+                </div>
               </div>
               <textarea id="narrative" name="narrative" rows="4" placeholder="Describe the event in detail..." required></textarea>
+              <span id="voice-preview" class="voice-preview"></span>
               <!-- ML assist panel — shown while typing, live severity + event suggestion -->
               <div id="ml-panel" class="ml-panel hidden">
                 <span class="ml-label">AI Assist</span>
@@ -366,6 +370,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script src="script.js?v=12"></script>
+  <script src="script.js?v=13"></script>
 </body>
 </html>

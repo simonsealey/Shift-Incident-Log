@@ -539,6 +539,16 @@ async function loadLog() {
 function isOpen(row)     { return row.followUpNeeded === "Yes" && !row.resolved; }
 function isResolved(row) { return row.followUpNeeded === "Yes" &&  row.resolved; }
 
+const ESCALATION_HOURS = 24;
+function isEscalated(row) {
+  if (!isOpen(row) || !row.createdAt) return false;
+  return (Date.now() - new Date(row.createdAt)) / 36e5 >= ESCALATION_HOURS;
+}
+function hoursOverdue(row) {
+  if (!row.createdAt) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(row.createdAt)) / 36e5 - ESCALATION_HOURS));
+}
+
 function applyFilters() {
   const search   = document.getElementById("filter-search").value.trim().toLowerCase();
   const campus   = document.getElementById("filter-campus").value;
@@ -562,6 +572,13 @@ function applyFilters() {
       if (!hay.includes(search)) return false;
     }
     return true;
+  });
+
+  // Escalated entries (open follow-ups > 24 h old) float to the top
+  currentView.sort((a, b) => {
+    if (isEscalated(a) && !isEscalated(b)) return -1;
+    if (!isEscalated(a) && isEscalated(b)) return 1;
+    return 0;
   });
 
   renderTable(currentView);
@@ -632,9 +649,14 @@ function renderTable(entries) {
     return;
   }
 
-  // Build follow-up cell/block (shared between table and cards)
+  // Build follow-up cell — escalated entries get a pulsing red badge
   function followHtml(r) {
     if (r._pending) return `<span class="badge badge-pending">Pending sync</span>`;
+    if (isEscalated(r)) return `<div class="followup-cell">
+        <span class="badge badge-escalated">🚨 Escalated</span>
+        <span class="escalated-overdue">${hoursOverdue(r)}h overdue</span>
+        <button class="resolve-btn" onclick="openResolveModal(${r.id})">Resolve</button>
+      </div>`;
     if (isOpen(r))  return `<div class="followup-cell">
         <span class="badge badge-open">Open</span>
         <button class="resolve-btn" onclick="openResolveModal(${r.id})">Resolve</button>
@@ -646,9 +668,8 @@ function renderTable(entries) {
     return `<span class="badge badge-no">No</span>`;
   }
 
-  // ── Desktop table (6 cols: When · Who · Type · Follow-Up · Narrative · Files) ──
+  // ── Desktop table ──────────────────────────────────────────
   const rows = entries.map(r => {
-    // Follow-up cell includes notes + resolution so nothing lives off-screen
     const notesRow = r.followUpNotes
       ? `<div class="followup-notes">${escapeHtml(r.followUpNotes)}</div>`
       : "";
@@ -657,7 +678,7 @@ function renderTable(entries) {
       : "";
 
     return `
-    <tr class="${r._pending ? "row-pending" : ""}" data-id="${r.id ?? ""}">
+    <tr class="${r._pending ? "row-pending" : ""} ${isEscalated(r) ? "row-escalated" : ""}" data-id="${r.id ?? ""}">
       <td class="col-when">
         <span class="when-date">${escapeHtml(r.date)}</span>
         <span class="when-meta">${escapeHtml(r.shift)} &middot; ${escapeHtml(r.time)}</span>
@@ -674,12 +695,18 @@ function renderTable(entries) {
         ${followHtml(r)}
         ${notesRow}
         ${resolutionRow}
+        ${!r._pending ? `<button class="comment-toggle-btn" onclick="toggleComments(${r.id})">💬 Comments</button>` : ""}
       </td>
       <td class="col-narrative">
         ${escapeHtml(r.narrative)}
         <span data-anomaly-id="${r.id}" class="hidden"></span>
       </td>
       <td>${attachmentsCell(r)}</td>
+    </tr>
+    <tr class="comment-tr" data-comment-row="${r.id}" style="display:none">
+      <td colspan="6" class="comment-td">
+        <div class="comment-panel" data-comment-panel="${r.id}"></div>
+      </td>
     </tr>`;
   }).join("");
 
@@ -696,7 +723,7 @@ function renderTable(entries) {
       : "";
 
     return `
-    <div class="log-card ${r._pending ? "log-card-pending" : ""}" data-id="${r.id ?? ""}">
+    <div class="log-card ${r._pending ? "log-card-pending" : ""} ${isEscalated(r) ? "log-card-escalated" : ""}" data-id="${r.id ?? ""}">
       <div class="log-card-top">
         <span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span>
         ${r.severity ? `<span class="sev-badge sev-${r.severity.toLowerCase()}">${r.severity}</span>` : ""}
@@ -713,6 +740,11 @@ function renderTable(entries) {
       ${notesHtml}
       ${resolutionHtml}
       ${filesHtml}
+      ${!r._pending ? `
+      <div class="log-card-comment-section">
+        <button class="comment-toggle-btn" onclick="toggleComments(${r.id})">💬 Comments</button>
+        <div class="comment-panel" data-comment-panel="${r.id}" style="display:none"></div>
+      </div>` : ""}
     </div>`;
   }).join("");
 
@@ -734,6 +766,180 @@ function renderTable(entries) {
     </div>
     <div class="log-cards-mobile">${cards}</div>
   `;
+}
+
+// ── Comment threads ───────────────────────────────────────
+
+function toggleComments(entryId) {
+  // Toggle the hidden table row
+  const tableRow = document.querySelector(`[data-comment-row="${entryId}"]`);
+  if (tableRow) {
+    const opening = tableRow.style.display === "none";
+    tableRow.style.display = opening ? "table-row" : "none";
+  }
+  // Toggle and lazy-load all comment panels (table + card share the same data attr)
+  document.querySelectorAll(`[data-comment-panel="${entryId}"]`).forEach(panel => {
+    const opening = panel.style.display === "none" || panel.style.display === "";
+    panel.style.display = opening ? "block" : "none";
+    if (opening && !panel.dataset.loaded) {
+      panel.dataset.loaded = "1";
+      loadComments(entryId, panel);
+    }
+  });
+}
+
+async function loadComments(entryId, container) {
+  container.innerHTML = `<p class="comment-loading muted">Loading…</p>`;
+  try {
+    const { data, error } = await db
+      .from("entry_comments")
+      .select("*")
+      .eq("entry_id", entryId)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    renderCommentPanel(data || [], container, entryId);
+  } catch {
+    container.innerHTML = `<p class="comment-error-msg">Could not load comments.</p>`;
+  }
+}
+
+function renderCommentPanel(comments, container, entryId) {
+  const savedName = localStorage.getItem("shiftlog_comment_name") || "";
+  const listHtml = comments.length
+    ? comments.map(c => `
+        <div class="comment">
+          <div class="comment-header">
+            <span class="comment-author">${escapeHtml(c.author_name)}</span>
+            <span class="comment-time">${fmtDate(c.created_at)}</span>
+          </div>
+          <p class="comment-body">${escapeHtml(c.body)}</p>
+        </div>`).join("")
+    : `<p class="comment-empty">No comments yet.</p>`;
+
+  container.innerHTML = `
+    <div class="comment-thread">
+      <div class="comment-list">${listHtml}</div>
+      <div class="comment-form">
+        <input  type="text"
+                class="comment-name-input"
+                placeholder="Your name *"
+                maxlength="60"
+                value="${escapeHtml(savedName)}" />
+        <textarea class="comment-body-input"
+                  rows="2"
+                  placeholder="Add a comment…"
+                  maxlength="500"></textarea>
+        <div class="comment-form-footer">
+          <button class="comment-submit-btn" onclick="submitComment(${entryId}, this)">Post</button>
+          <p class="comment-error hidden"></p>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function submitComment(entryId, btn) {
+  const thread = btn.closest(".comment-thread");
+  const nameEl = thread.querySelector(".comment-name-input");
+  const bodyEl = thread.querySelector(".comment-body-input");
+  const errEl  = thread.querySelector(".comment-error");
+  const name   = nameEl.value.trim();
+  const body   = bodyEl.value.trim();
+
+  errEl.classList.add("hidden");
+  if (!name) {
+    errEl.textContent = "Please enter your name before posting.";
+    errEl.classList.remove("hidden");
+    nameEl.focus();
+    return;
+  }
+  if (!body) {
+    errEl.textContent = "Please write a comment.";
+    errEl.classList.remove("hidden");
+    bodyEl.focus();
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = "Posting…";
+
+  const { error } = await db.from("entry_comments")
+    .insert({ entry_id: entryId, author_name: name, body });
+
+  if (error) {
+    errEl.textContent = "Failed to post — please try again.";
+    errEl.classList.remove("hidden");
+    btn.disabled    = false;
+    btn.textContent = "Post";
+    return;
+  }
+
+  localStorage.setItem("shiftlog_comment_name", name);
+
+  // Reload all panels for this entry so both table + card stay in sync
+  document.querySelectorAll(`[data-comment-panel="${entryId}"]`).forEach(panel => {
+    panel.dataset.loaded = "";
+    loadComments(entryId, panel);
+  });
+}
+
+// ── Voice-to-text ─────────────────────────────────────────
+
+let _voiceRec    = null;
+let _voiceActive = false;
+
+function toggleVoice() {
+  _voiceActive ? stopVoice() : startVoice();
+}
+
+function startVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    alert("Voice to text isn't supported in this browser. Try Chrome or Edge.");
+    return;
+  }
+  _voiceRec                = new SR();
+  _voiceRec.continuous     = true;
+  _voiceRec.interimResults = true;
+  _voiceRec.lang           = "en-US";
+
+  const textarea = document.getElementById("narrative");
+  const micBtn   = document.getElementById("mic-btn");
+  const preview  = document.getElementById("voice-preview");
+
+  micBtn.classList.add("mic-recording");
+  micBtn.title = "Tap to stop recording";
+  _voiceActive = true;
+
+  let committed = textarea.value;
+
+  _voiceRec.onresult = (e) => {
+    let interim = "", final = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      e.results[i].isFinal
+        ? (final   += e.results[i][0].transcript)
+        : (interim += e.results[i][0].transcript);
+    }
+    if (final) {
+      committed      = (committed + " " + final).trimStart();
+      textarea.value = committed;
+    }
+    if (preview) preview.textContent = interim;
+    if (textarea.value.length >= 10) callMlApi(textarea.value);
+  };
+
+  _voiceRec.onerror = () => stopVoice();
+  _voiceRec.onend   = () => { if (_voiceActive) stopVoice(); };
+  _voiceRec.start();
+}
+
+function stopVoice() {
+  _voiceActive = false;
+  const micBtn  = document.getElementById("mic-btn");
+  const preview = document.getElementById("voice-preview");
+  if (micBtn)  { micBtn.classList.remove("mic-recording"); micBtn.title = "Voice to text"; }
+  if (preview) preview.textContent = "";
+  try { _voiceRec?.stop(); } catch {}
+  _voiceRec = null;
 }
 
 // ── Resolve follow-up ─────────────────────────────────────
