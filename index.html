@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=16" />
+  <link rel="stylesheet" href="style.css?v=17" />
   <!-- PWA: installable + offline-capable -->
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#2563eb" />
@@ -19,7 +19,7 @@
 </head>
 <body>
 
-  <!-- Login Gate -->
+  <!-- PIN Gate -->
   <div id="pin-gate">
     <div class="pin-box">
       <div class="pin-logo">
@@ -35,11 +35,10 @@
         </svg>
       </div>
       <h1>Shift & Incident Log</h1>
-      <p>Sign in to continue</p>
-      <input type="email"    id="login-email"    placeholder="Email address" autocomplete="email" />
-      <input type="password" id="login-password" placeholder="Password"      autocomplete="current-password" />
-      <button id="login-btn" onclick="login()">Sign In</button>
-      <p id="login-error" class="error hidden"></p>
+      <p>Enter your PIN to continue</p>
+      <input type="password" id="pin-input" maxlength="6" placeholder="••••" autocomplete="off" inputmode="numeric" />
+      <button onclick="checkPin()">Unlock</button>
+      <p id="pin-error" class="error hidden">Incorrect PIN. Try again.</p>
     </div>
   </div>
 
@@ -375,6 +374,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script src="script.js?v=16"></script>
+  <script src="script.js?v=17"></script>
 </body>
 </html>

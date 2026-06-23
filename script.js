@@ -13,10 +13,6 @@
     navigator.serviceWorker.getRegistrations()
       .then(regs => regs.forEach(r => r.unregister()));
   }
-  // Clear Supabase auth tokens from localStorage so the login screen shows
-  Object.keys(localStorage)
-    .filter(k => k.startsWith("sb-"))
-    .forEach(k => localStorage.removeItem(k));
   sessionStorage.clear();
 })();
 
@@ -27,7 +23,18 @@ const SUPABASE_ANON_KEY = "sb_publishable_QFxZOVuw_lWOKopvMGRBQg_9RTj9RNw";
 
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const NAME_KEY    = "shiftlog_staff_name";  // fallback name if profile not loaded yet
+const SESSION_KEY = "shiftlog_auth";
+const NAME_KEY    = "shiftlog_staff_name";
+
+// ── Staff directory — add / edit PINs here ────────────────
+// PIN → { name, role }   role: "admin" | "staff"
+// Admins can resolve follow-ups. Staff can submit, view, and comment.
+const USERS = {
+  "1474": { name: "Simon Sealey", role: "admin"  },
+  // Add more staff below:
+  // "2345": { name: "Jane Smith",  role: "staff"  },
+  // "6789": { name: "John Doe",    role: "admin"  },
+};
 const CAMPUS_KEY  = "shiftlog_campus";      // remembers the last campus per-device
 const CACHE_KEY   = "shiftlog_cache";       // last-fetched entries, for offline viewing
 
@@ -90,71 +97,31 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-// ── Auth ──────────────────────────────────────────────────
+// ── PIN Auth ──────────────────────────────────────────────
 
-let currentUser    = null;
 let currentProfile = null;
 
-// Called once on startup — checks for an existing session
-async function initAuth() {
-  const { data: { session } } = await db.auth.getSession();
-  if (session) {
-    await onSignedIn(session.user);
+function checkPin() {
+  const input = document.getElementById("pin-input").value.trim();
+  const user  = USERS[input];
+  if (user) {
+    currentProfile = { full_name: user.name, role: user.role };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(currentProfile));
+    showApp();
+  } else {
+    document.getElementById("pin-error").classList.remove("hidden");
+    document.getElementById("pin-input").value = "";
+    document.getElementById("pin-input").focus();
   }
-  db.auth.onAuthStateChange(async (event, session) => {
-    if (event === "SIGNED_IN"  && session) await onSignedIn(session.user);
-    if (event === "SIGNED_OUT")             showLoginScreen();
-  });
 }
 
-async function login() {
-  const email    = document.getElementById("login-email").value.trim();
-  const password = document.getElementById("login-password").value;
-  const errEl    = document.getElementById("login-error");
-  const btn      = document.getElementById("login-btn");
-
-  errEl.classList.add("hidden");
-  btn.disabled    = true;
-  btn.textContent = "Signing in…";
-
-  const { error } = await db.auth.signInWithPassword({ email, password });
-  if (error) {
-    errEl.textContent = error.message;
-    errEl.classList.remove("hidden");
-    btn.disabled    = false;
-    btn.textContent = "Sign In";
-  }
-  // On success, onAuthStateChange fires → onSignedIn handles the rest
-}
-
-async function logout() {
-  await db.auth.signOut();
-}
-
-async function onSignedIn(user) {
-  currentUser = user;
-
-  // Fetch this user's profile (name + role)
-  const { data: profile } = await db
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-  currentProfile = profile;
-
-  showApp();
-}
-
-function showLoginScreen() {
-  currentUser    = null;
+function logout() {
   currentProfile = null;
+  sessionStorage.removeItem(SESSION_KEY);
   document.getElementById("app").classList.add("hidden");
   document.getElementById("pin-gate").classList.remove("hidden");
-  document.getElementById("login-email").value    = "";
-  document.getElementById("login-password").value = "";
-  document.getElementById("login-error").classList.add("hidden");
-  document.getElementById("login-btn").disabled    = false;
-  document.getElementById("login-btn").textContent = "Sign In";
+  document.getElementById("pin-input").value = "";
+  document.getElementById("pin-error").classList.add("hidden");
   document.getElementById("user-info").classList.add("hidden");
 }
 
@@ -162,12 +129,12 @@ function showApp() {
   document.getElementById("pin-gate").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
 
-  // Show user name + role badge in header
-  const name = currentProfile?.full_name || currentUser?.email || "";
+  // Show name + role badge in header
+  const name = currentProfile?.full_name || "";
   const role = currentProfile?.role || "staff";
-  document.getElementById("user-name").textContent        = name;
-  document.getElementById("user-role-badge").textContent  = role === "admin" ? "Admin" : "Staff";
-  document.getElementById("user-role-badge").className    = `role-badge role-${role}`;
+  document.getElementById("user-name").textContent       = name;
+  document.getElementById("user-role-badge").textContent = role === "admin" ? "Admin" : "Staff";
+  document.getElementById("user-role-badge").className   = `role-badge role-${role}`;
   document.getElementById("user-info").classList.remove("hidden");
 
   applyRoleUI();
@@ -180,20 +147,20 @@ function showApp() {
 }
 
 function applyRoleUI() {
-  // Resolve buttons are admin-only
   const isAdmin = currentProfile?.role === "admin";
   document.querySelectorAll(".resolve-btn").forEach(btn => {
     btn.style.display = isAdmin ? "" : "none";
   });
 }
 
-// Allow Enter key on password field
-document.getElementById("login-password").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") login();
+// Allow Enter key on PIN input
+document.getElementById("pin-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") checkPin();
 });
 
-// Kick off auth on load
-initAuth();
+// Restore session if still active (cleared on refresh by design)
+const _saved = sessionStorage.getItem(SESSION_KEY);
+if (_saved) { try { currentProfile = JSON.parse(_saved); showApp(); } catch {} }
 
 // ── Tabs ──────────────────────────────────────────────────
 
