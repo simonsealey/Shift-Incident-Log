@@ -12,8 +12,8 @@ const CACHE = "shiftlog-v8";
 const CORE = [
   "./",
   "./index.html",
-  "./style.css",
-  "./script.js",
+  "./style.css?v=8",
+  "./script.js?v=8",
   "./manifest.json",
   "./icon.svg",
 ];
