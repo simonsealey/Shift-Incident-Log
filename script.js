@@ -278,10 +278,13 @@ async function callMlApi(narrative) {
   }
 }
 
+let _mlSeverity = null;   // tracks the last AI-predicted severity for the current form entry
+
 function showMlPanel(d) {
   const loading = document.getElementById("ml-loading");
   if (loading) loading.classList.add("hidden");
   const panel = document.getElementById("ml-panel");
+  _mlSeverity = d.severity || null;
 
   // Severity pill
   const sevEl = document.getElementById("ml-sev-pill");
@@ -324,6 +327,7 @@ function showMlPanel(d) {
 }
 
 function hideMlPanel() {
+  _mlSeverity = null;
   document.getElementById("ml-panel")?.classList.add("hidden");
 }
 
@@ -387,6 +391,7 @@ document.getElementById("entry-form").addEventListener("submit", async (e) => {
     narrative:        form.narrative.value.trim(),
     follow_up_needed: form.followUpNeeded.value,
     follow_up_notes:  form.followUpNotes.value.trim(),
+    severity: _mlSeverity || null,
   };
 
   const files = Array.from(document.getElementById("attach-input").files || []);
@@ -494,6 +499,7 @@ async function fetchEntries() {
     resolvedBy:     r.resolved_by,
     resolvedAt:     r.resolved_at,
     resolutionNotes:r.resolution_notes,
+    severity:      r.severity || null,
     attachments:    r.attachments || [],
     createdAt:      r.created_at,
   }));
@@ -660,7 +666,10 @@ function renderTable(entries) {
         <span class="who-name">${escapeHtml(r.name)}</span>
         <span class="who-campus">${escapeHtml(r.campus)}</span>
       </td>
-      <td><span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span></td>
+      <td>
+        <span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span>
+        ${r.severity ? `<span class="sev-badge sev-${r.severity.toLowerCase()}">${r.severity}</span>` : ""}
+      </td>
       <td class="col-followup">
         ${followHtml(r)}
         ${notesRow}
@@ -690,6 +699,7 @@ function renderTable(entries) {
     <div class="log-card ${r._pending ? "log-card-pending" : ""}" data-id="${r.id ?? ""}">
       <div class="log-card-top">
         <span class="badge badge-${slug(r.eventType)}">${escapeHtml(r.eventType)}</span>
+        ${r.severity ? `<span class="sev-badge sev-${r.severity.toLowerCase()}">${r.severity}</span>` : ""}
         <span class="log-card-meta">${escapeHtml(r.date)} &middot; ${escapeHtml(r.shift)} &middot; ${escapeHtml(r.time)}</span>
       </div>
       <div class="log-card-narrative">

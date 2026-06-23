@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
   <!-- PWA: installable + offline-capable -->
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#2563eb" />
@@ -137,7 +137,7 @@
             <div class="field full-width">
               <div class="narrative-label-row">
                 <label for="narrative">Narrative</label>
-                <span id="ai-status" class="ai-status ai-offline" title="AI server offline — run: cd ml &amp;&amp; uvicorn api:app --reload">
+                <span id="ai-status" class="ai-status ai-offline" title="AI assist requires the local ML server to be running on this machine">
                   <span class="ai-dot"></span><span class="ai-status-text">AI offline</span>
                 </span>
               </div>
@@ -366,6 +366,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script src="script.js?v=11"></script>
+  <script src="script.js?v=12"></script>
 </body>
 </html>

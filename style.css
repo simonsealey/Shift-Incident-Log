@@ -406,6 +406,26 @@ tbody td { padding: 11px 14px; vertical-align: top; line-height: 1.5; }
 .badge-visitor     { background: #eff6ff; color: #2563eb; }
 .badge-other       { background: #f8fafc; color: #64748b; }
 
+/* ── Severity badges (shown in log alongside event type) ── */
+.sev-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  white-space: nowrap;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.sev-high   { background: #dc2626; color: #fff; }
+.sev-medium { background: #f59e0b; color: #fff; }
+.sev-low    { background: #16a34a; color: #fff; }
+
+[data-theme="dark"] .sev-high   { background: #b91c1c; }
+[data-theme="dark"] .sev-medium { background: #d97706; }
+[data-theme="dark"] .sev-low    { background: #15803d; }
+
 .no-results {
   text-align: center;
   padding: 60px 40px;
