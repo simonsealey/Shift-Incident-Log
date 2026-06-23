@@ -91,16 +91,18 @@ body {
 
 .pin-box input {
   width: 100%;
-  padding: 14px 16px;
-  font-size: 22px;
-  letter-spacing: 8px;
-  text-align: center;
+  padding: 12px 16px;
+  font-size: 15px;
+  letter-spacing: 0;
+  text-align: left;
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   outline: none;
   transition: border-color var(--transition), box-shadow var(--transition);
   font-family: inherit;
+  background: var(--surface);
+  color: var(--text);
 }
 
 .pin-box input:focus {
@@ -176,6 +178,32 @@ header {
   transition: all var(--transition);
   font-family: inherit;
 }
+
+/* User info + role badge in header */
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.role-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  letter-spacing: .3px;
+}
+.role-staff { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.role-admin { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+[data-theme="dark"] .role-admin { background: #1e3a8a22; color: #93c5fd; border-color: #1e40af; }
 
 .logout-btn:hover { border-color: var(--danger); color: var(--danger); background: #fef2f2; }
 
