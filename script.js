@@ -32,8 +32,8 @@ const NAME_KEY    = "shiftlog_staff_name";
 const USERS = {
   "1474": { name: "Simon Sealey", role: "admin"  },
   // Add more staff below:
-  // "2345": { name: "Jane Smith",  role: "staff"  },
-  // "6789": { name: "John Doe",    role: "admin"  },
+  "1234": { name: "Admin",  role: "admin"  },
+  "1053": { name: "James Booe",    role: "staff"  },
 };
 const CAMPUS_KEY  = "shiftlog_campus";      // remembers the last campus per-device
 const CACHE_KEY   = "shiftlog_cache";       // last-fetched entries, for offline viewing
