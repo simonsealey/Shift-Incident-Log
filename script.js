@@ -1,3 +1,25 @@
+// ── Refresh → clear cache + force re-login ────────────────
+// On a page reload we wipe every SW cache and unregister the service worker
+// so the browser is forced to fetch fresh JS/CSS from the network.
+// We also clear the session so the PIN gate reappears — clean slate.
+(function handleRefresh() {
+  const nav = performance.getEntriesByType?.("navigation")?.[0];
+  const isReload = nav ? nav.type === "reload" : performance.navigation?.type === 1;
+  if (!isReload) return;
+
+  // Wipe all cached assets
+  if ("caches" in window) {
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+  }
+  // Unregister the service worker so the next registration fetches everything fresh
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistrations()
+      .then(regs => regs.forEach(r => r.unregister()));
+  }
+  // Clear session — PIN gate will be shown
+  sessionStorage.clear();
+})();
+
 // ── Supabase config ── replace these two with your project's values
 // (Supabase dashboard → Project Settings → API)
 const SUPABASE_URL      = "https://ruaioaonbejgbjafozuz.supabase.co";
@@ -60,23 +82,13 @@ function toggleTheme() {
 })();
 
 // ── PWA service worker ────────────────────────────────────
+// Register for offline support. On refresh the handleRefresh() block above
+// already unregisters the old SW and clears caches, so this re-registers
+// cleanly and fetches fresh assets from the network.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").then((reg) => {
-      // Check for an updated SW immediately on every page load rather than
-      // waiting up to 24 hours for the browser's normal check interval.
-      reg.update();
-    }).catch(() => {/* offline support unavailable */});
-
-    // controllerchange fires only when a *new* SW replaces an old one.
-    // It does NOT fire on first install or on a normal refresh, so there
-    // is no reload loop. The reloading flag is a safety net.
-    let reloading = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (reloading) return;
-      reloading = true;
-      window.location.reload();
-    });
+    navigator.serviceWorker.register("sw.js")
+      .catch(() => {/* offline support unavailable */});
   });
 }
 
