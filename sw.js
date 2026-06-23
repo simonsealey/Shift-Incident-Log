@@ -5,15 +5,15 @@
 //   • Supabase requests are never cached — writes made while offline are queued
 //     in IndexedDB by the app and synced when the connection returns.
 
-const CACHE = "shiftlog-v13";
+const CACHE = "shiftlog-v14";
 
 // Paths are relative so the SW works both at the domain root (local preview)
 // and under a project subpath (GitHub Pages).
 const CORE = [
   "./",
   "./index.html",
-  "./style.css?v=13",
-  "./script.js?v=13",
+  "./style.css?v=14",
+  "./script.js?v=14",
   "./manifest.json",
   "./icon.svg",
 ];

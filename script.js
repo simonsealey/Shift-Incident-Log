@@ -790,17 +790,20 @@ function toggleComments(entryId) {
 
 async function loadComments(entryId, container) {
   container.innerHTML = `<p class="comment-loading muted">Loading…</p>`;
-  try {
-    const { data, error } = await db
-      .from("entry_comments")
-      .select("*")
-      .eq("entry_id", entryId)
-      .order("created_at", { ascending: true });
-    if (error) throw error;
-    renderCommentPanel(data || [], container, entryId);
-  } catch {
-    container.innerHTML = `<p class="comment-error-msg">Could not load comments.</p>`;
+  const { data, error } = await db
+    .from("entry_comments")
+    .select("*")
+    .eq("entry_id", entryId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    const isTableMissing = error.code === "42P01" || error.message?.includes("does not exist");
+    container.innerHTML = isTableMissing
+      ? `<p class="comment-error-msg">⚠️ Run <strong>supabase_comments.sql</strong> in your Supabase SQL Editor to enable comments.</p>`
+      : `<p class="comment-error-msg">Could not load comments: ${escapeHtml(error.message)}</p>`;
+    return;
   }
+  renderCommentPanel(data || [], container, entryId);
 }
 
 function renderCommentPanel(comments, container, entryId) {
