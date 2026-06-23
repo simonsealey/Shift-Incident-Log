@@ -63,15 +63,19 @@ function toggleTheme() {
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").then((reg) => {
-      // Force an immediate check for a new SW on every page load.
-      // Without this, browsers can wait up to 24 hours before checking.
+      // Check for an updated SW immediately on every page load rather than
+      // waiting up to 24 hours for the browser's normal check interval.
       reg.update();
     }).catch(() => {/* offline support unavailable */});
 
-    // When a new SW activates it sends SW_UPDATED to all open tabs.
-    // Reload so the tab picks up fresh JS/CSS immediately.
-    navigator.serviceWorker.addEventListener("message", (event) => {
-      if (event.data?.type === "SW_UPDATED") window.location.reload();
+    // controllerchange fires only when a *new* SW replaces an old one.
+    // It does NOT fire on first install or on a normal refresh, so there
+    // is no reload loop. The reloading flag is a safety net.
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
     });
   });
 }

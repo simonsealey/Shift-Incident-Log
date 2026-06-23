@@ -5,15 +5,15 @@
 //   • Supabase requests are never cached — writes made while offline are queued
 //     in IndexedDB by the app and synced when the connection returns.
 
-const CACHE = "shiftlog-v9";
+const CACHE = "shiftlog-v10";
 
 // Paths are relative so the SW works both at the domain root (local preview)
 // and under a project subpath (GitHub Pages).
 const CORE = [
   "./",
   "./index.html",
-  "./style.css?v=9",
-  "./script.js?v=9",
+  "./style.css?v=10",
+  "./script.js?v=10",
   "./manifest.json",
   "./icon.svg",
 ];
@@ -31,11 +31,6 @@ self.addEventListener("activate", (event) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
-      // Tell every open tab to reload so they pick up fresh JS/CSS immediately.
-      // Without this, stale-while-revalidate keeps serving the old bundle until
-      // the user manually refreshes.
-      .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
-      .then((clients) => clients.forEach(c => c.postMessage({ type: "SW_UPDATED" })))
   );
 });
 
