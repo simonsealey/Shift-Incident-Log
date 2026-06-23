@@ -5,15 +5,15 @@
 //   • Supabase requests are never cached — writes made while offline are queued
 //     in IndexedDB by the app and synced when the connection returns.
 
-const CACHE = "shiftlog-v8";
+const CACHE = "shiftlog-v9";
 
 // Paths are relative so the SW works both at the domain root (local preview)
 // and under a project subpath (GitHub Pages).
 const CORE = [
   "./",
   "./index.html",
-  "./style.css?v=8",
-  "./script.js?v=8",
+  "./style.css?v=9",
+  "./script.js?v=9",
   "./manifest.json",
   "./icon.svg",
 ];
@@ -39,7 +39,22 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Cache-first with background refresh, used for both CDN and same-origin assets.
+// Network-first: always try the network, fall back to cache when offline.
+// Used for same-origin JS/CSS so laptops never get stuck on a stale bundle.
+function networkFirst(request) {
+  return caches.open(CACHE).then(async (cache) => {
+    try {
+      const res = await fetch(request);
+      if (res && res.ok) cache.put(request, res.clone());
+      return res;
+    } catch {
+      return cache.match(request);
+    }
+  });
+}
+
+// Stale-while-revalidate: serve from cache instantly, refresh in background.
+// Used only for large CDN libraries that rarely change (Chart.js, Supabase JS).
 function staleWhileRevalidate(request) {
   return caches.open(CACHE).then(async (cache) => {
     const cached = await cache.match(request);
@@ -52,27 +67,27 @@ function staleWhileRevalidate(request) {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET") return;            // never touch inserts/updates
+  if (request.method !== "GET") return;
 
   const url = new URL(request.url);
 
-  // Supabase API + storage: always go to the network, never cache.
+  // Supabase API + storage: always network, never cache.
   if (url.hostname.endsWith("supabase.co")) return;
 
-  // Page navigations: network-first, fall back to the cached shell when offline.
+  // Page navigations: network-first, fall back to cached shell when offline.
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).catch(() => caches.match("./index.html")));
     return;
   }
 
-  // CDN libraries (Supabase JS, Chart.js).
+  // CDN libraries: stale-while-revalidate (large, rarely change).
   if (url.hostname === "cdn.jsdelivr.net") {
     event.respondWith(staleWhileRevalidate(request));
     return;
   }
 
-  // Same-origin static assets.
+  // Same-origin JS/CSS: network-first so updates are always picked up immediately.
   if (url.origin === self.location.origin) {
-    event.respondWith(staleWhileRevalidate(request));
+    event.respondWith(networkFirst(request));
   }
 });

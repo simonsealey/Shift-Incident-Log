@@ -62,11 +62,14 @@ function toggleTheme() {
 // ── PWA service worker ────────────────────────────────────
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {/* offline support unavailable */});
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      // Force an immediate check for a new SW on every page load.
+      // Without this, browsers can wait up to 24 hours before checking.
+      reg.update();
+    }).catch(() => {/* offline support unavailable */});
 
     // When a new SW activates it sends SW_UPDATED to all open tabs.
-    // Reload immediately so the tab picks up the fresh JS/CSS from the
-    // new cache rather than continuing to run the old stale bundle.
+    // Reload so the tab picks up fresh JS/CSS immediately.
     navigator.serviceWorker.addEventListener("message", (event) => {
       if (event.data?.type === "SW_UPDATED") window.location.reload();
     });
