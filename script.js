@@ -63,6 +63,13 @@ function toggleTheme() {
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").catch(() => {/* offline support unavailable */});
+
+    // When a new SW activates it sends SW_UPDATED to all open tabs.
+    // Reload immediately so the tab picks up the fresh JS/CSS from the
+    // new cache rather than continuing to run the old stale bundle.
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "SW_UPDATED") window.location.reload();
+    });
   });
 }
 
